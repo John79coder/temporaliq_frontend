@@ -1,3 +1,6 @@
+// ============================================
+// src/pages/SignIn.tsx - UPDATED WITHOUT DEMO MODE
+// ============================================
 import React, { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
@@ -27,10 +30,10 @@ const SignIn: React.FC = () => {
                     </svg>
                 </div>
                 <h1 className="text-2xl font-bold text-gray-900 mb-2">
-                    Welcome to {APP_NAME}
+                    Welcome back to {APP_NAME}
                 </h1>
                 <p className="text-gray-600">
-                    Sign in to start scheduling with AI
+                    Sign in to continue scheduling with AI
                 </p>
             </div>
 
@@ -87,15 +90,6 @@ const SignIn: React.FC = () => {
                     <EmailSignInForm />
                 </>
             )}
-
-            {/* Demo Credentials Notice */}
-            <div className="mt-8 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="text-sm text-blue-800">
-                    <strong>Demo Mode:</strong> Use{' '}
-                    <code className="px-1 py-0.5 bg-blue-100 rounded">demo@smartscheduler.ai</code> /{' '}
-                    <code className="px-1 py-0.5 bg-blue-100 rounded">Demo123!</code> to sign in
-                </p>
-            </div>
         </div>
     )
 }

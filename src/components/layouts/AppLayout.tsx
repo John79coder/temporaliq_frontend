@@ -1,8 +1,11 @@
+// ============================================
+// src/components/layouts/AppLayout.tsx - PRODUCTION VERSION
+// ============================================
 import React, { useEffect } from 'react'
 import { Outlet, useNavigate, Link, useLocation } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import { getCurrentUser } from '@/api/auth'
-import { getStoredToken, getStoredUser, setStoredUser } from '@/utils/storage'
+import { getStoredToken, getStoredUser, setStoredUser, removeStoredToken } from '@/utils/storage'
 import { cn } from '@/utils/cn'
 import toast from 'react-hot-toast'
 
@@ -21,26 +24,54 @@ const AppLayout: React.FC = () => {
                 return
             }
 
+            // Check if this is a temporary session
+            const isTempSession = sessionStorage.getItem('temp_session')
+            if (isTempSession && !sessionStorage.getItem('session_active')) {
+                // Browser was closed and reopened
+                removeStoredToken()
+                setLoading(false)
+                navigate('/signin')
+                return
+            }
+
+            // Mark session as active
+            sessionStorage.setItem('session_active', 'true')
+
             try {
-                // Try to get user from storage first
+                // Try to get user from storage first for faster load
                 const storedUser = getStoredUser()
                 if (storedUser) {
                     setUser(storedUser)
                 }
 
-                // Then fetch fresh data
+                // Then fetch fresh data from backend
                 const currentUser = await getCurrentUser()
                 setUser(currentUser)
                 setStoredUser(currentUser)
-            } catch (error) {
+
+                // Check if user needs to verify email
+                if (!currentUser.is_verified) {
+                    toast.error('Please verify your email to continue')
+                    navigate('/verify-email')
+                }
+            } catch (error: any) {
                 console.error('Failed to fetch user:', error)
-                // Don't logout on error in demo mode, just use stored user
-                const storedUser = getStoredUser()
-                if (storedUser) {
-                    setUser(storedUser)
-                } else {
+
+                if (error.message === 'Unauthorized') {
+                    // Token is invalid
+                    removeStoredToken()
                     logout()
                     navigate('/signin')
+                } else {
+                    // Network error - try to use stored user
+                    const storedUser = getStoredUser()
+                    if (storedUser) {
+                        setUser(storedUser)
+                    } else {
+                        // No stored user, must re-authenticate
+                        logout()
+                        navigate('/signin')
+                    }
                 }
             } finally {
                 setLoading(false)
@@ -50,10 +81,18 @@ const AppLayout: React.FC = () => {
         initAuth()
     }, [])
 
-    const handleLogout = () => {
-        logout()
-        toast.success('Logged out successfully')
-        navigate('/signin')
+    const handleLogout = async () => {
+        try {
+            await logout()
+        } catch (error) {
+            console.error('Logout error:', error)
+        } finally {
+            // Always clear local data and redirect
+            removeStoredToken()
+            sessionStorage.clear()
+            toast.success('Logged out successfully')
+            navigate('/signin')
+        }
     }
 
     const navItems = [
@@ -69,7 +108,7 @@ const AppLayout: React.FC = () => {
                     <div className="flex h-16 items-center justify-between">
                         <div className="flex items-center space-x-8">
                             <Link to="/" className="flex items-center space-x-2">
-                                <div className="w-8 h-8 bg-apple-blue rounded-lg flex items-center justify-center">
+                                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
                                     <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                     </svg>

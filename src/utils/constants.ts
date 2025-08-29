@@ -1,4 +1,7 @@
-export const APP_NAME = 'TemporalIQ'
+// ============================================
+// src/utils/constants.ts - UPDATED ENDPOINTS
+// ============================================
+export const APP_NAME = 'SmartScheduler'
 export const APP_TAGLINE = 'AI-Powered Task Scheduling for Your Calendar'
 
 export const ROUTES = {
@@ -8,27 +11,41 @@ export const ROUTES = {
     ONBOARDING: '/onboarding',
     SETTINGS: '/settings',
     SUCCESS: '/success',
+    VERIFY_EMAIL: '/verify-email',
 } as const
 
 export const API_ENDPOINTS = {
     AUTH: {
-        SIGNIN: '/auth/signin',
+        SIGNIN: '/auth/login',
         SIGNUP: '/auth/signup',
-        APPLE: '/auth/apple',
+        APPLE: '/auth/apple-signin',
+        VERIFY: '/auth/verify',
+        RESEND_VERIFICATION: '/auth/resend-verification',
+        REQUEST_RESET: '/auth/request-reset',
+        RESET_PASSWORD: '/auth/reset-password',
         REFRESH: '/auth/refresh',
         LOGOUT: '/auth/logout',
         CURRENT_USER: '/auth/me',
     },
     NOTION: {
-        CONNECT: '/notion/connect',
+        CONNECT: '/notion/auth/connect',
+        CALLBACK: '/notion/auth/callback',
         DATABASES: '/notion/databases',
         SYNC: '/notion/sync',
     },
     CALENDAR: {
-        CONNECT: '/calendar/connect',
-        LIST: '/calendar/list',
-        PREVIEW: '/calendar/preview',
-        WRITE: '/calendar/write',
+        CONNECT: '/icloud/connect',
+        LIST: '/icloud/calendars',
+        AVAILABLE: '/icloud/available',
+        SCHEDULE: '/icloud/schedule',
+    },
+    SCHEDULING: {
+        PREVIEW: '/scheduling/preview',
+        CONFIRM: '/scheduling/confirm',
+    },
+    SUBSCRIPTION: {
+        CREATE: '/subscriptions/create',
+        WEBHOOK: '/subscriptions/webhook',
     },
 } as const
 
@@ -39,4 +56,5 @@ export const ERROR_MESSAGES = {
     INVALID_CREDENTIALS: 'Invalid email or password.',
     EMAIL_IN_USE: 'This email is already registered.',
     WEAK_PASSWORD: 'Please choose a stronger password.',
+    UNVERIFIED: 'Please verify your email before signing in.',
 } as const

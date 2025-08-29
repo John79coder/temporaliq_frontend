@@ -1,8 +1,11 @@
+// ============================================
+// src/components/auth/AppleSignInButton.tsx - PRODUCTION VERSION
+// ============================================
 import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import { signInWithApple } from '@/api/auth'
-import { setStoredUser } from '@/utils/storage'
+import { setStoredUser, setStoredToken, setRefreshToken } from '@/utils/storage'
 import toast from 'react-hot-toast'
 
 declare global {
@@ -20,9 +23,15 @@ export const AppleSignInButton: React.FC = () => {
     const navigate = useNavigate()
     const { login } = useAuthStore()
     const [isLoading, setIsLoading] = useState(false)
-    const [isAppleReady, setIsAppleReady] = useState(false)
 
     useEffect(() => {
+        // Only load Apple SDK if we have a client ID configured
+        const appleClientId = import.meta.env.VITE_APPLE_CLIENT_ID
+        if (!appleClientId || appleClientId === 'com.smartscheduler.web') {
+            // Skip loading if no real Apple ID configured
+            return
+        }
+
         // Check if Apple Sign In SDK is already loaded
         if (window.AppleID) {
             initializeAppleSignIn()
@@ -40,7 +49,6 @@ export const AppleSignInButton: React.FC = () => {
 
         script.onerror = () => {
             console.error('Failed to load Apple Sign In SDK')
-            // Don't show error toast in demo mode
         }
 
         document.body.appendChild(script)
@@ -56,12 +64,11 @@ export const AppleSignInButton: React.FC = () => {
         if (window.AppleID) {
             try {
                 window.AppleID.auth.init({
-                    clientId: import.meta.env.VITE_APPLE_CLIENT_ID || 'com.smartscheduler.web',
+                    clientId: import.meta.env.VITE_APPLE_CLIENT_ID,
                     scope: 'name email',
                     redirectURI: `${window.location.origin}/auth/apple/callback`,
                     usePopup: true,
                 })
-                setIsAppleReady(true)
             } catch (error) {
                 console.error('Failed to initialize Apple Sign In:', error)
             }
@@ -69,26 +76,61 @@ export const AppleSignInButton: React.FC = () => {
     }
 
     const handleAppleSignIn = async () => {
-        // Always use mock in demo mode
-        setIsLoading(true)
-        try {
-            // Mock Apple sign in
-            const response = await signInWithApple('mock_apple_auth_code')
+        const appleClientId = import.meta.env.VITE_APPLE_CLIENT_ID
 
-            // Store user data
-            setStoredUser(response.user)
+        // Check if Apple Sign In is properly configured
+        if (!appleClientId || appleClientId === 'com.smartscheduler.web') {
+            toast.error('Apple Sign In is not configured. Please use email sign in.')
+            return
+        }
+
+        if (!window.AppleID) {
+            toast.error('Apple Sign In is not available. Please try again or use email sign in.')
+            return
+        }
+
+        setIsLoading(true)
+
+        try {
+            // Trigger Apple Sign In
+            const response = await window.AppleID.auth.signIn()
+
+            // Send authorization code and ID token to backend
+            const authResponse = await signInWithApple(
+                response.authorization.code,
+                response.authorization.id_token
+            )
+
+            // Store user data and tokens
+            setStoredUser(authResponse.user)
+            setStoredToken(authResponse.access_token)
+            if (authResponse.refresh_token) {
+                setRefreshToken(authResponse.refresh_token)
+            }
 
             // Update auth store
-            login(response.user, response.access_token)
+            login(authResponse.user, authResponse.access_token)
 
             // Show success message
-            toast.success(`Welcome, ${response.user.name}!`)
+            toast.success(`Welcome${authResponse.user.name ? ', ' + authResponse.user.name : ''}!`)
 
-            // Navigate to appropriate page
-            navigate('/onboarding')
-        } catch (error) {
+            // Navigate based on user status
+            if (!authResponse.user.is_verified) {
+                navigate('/verify-email')
+            } else if (authResponse.user.is_in_trial && !authResponse.user.has_used_free_preview) {
+                navigate('/onboarding')
+            } else {
+                navigate('/')
+            }
+        } catch (error: any) {
             console.error('Apple Sign In failed:', error)
-            toast.error('Failed to sign in with Apple')
+
+            if (error.error === 'popup_closed_by_user') {
+                // User cancelled - no need to show error
+                return
+            }
+
+            toast.error('Failed to sign in with Apple. Please try email sign in.')
         } finally {
             setIsLoading(false)
         }

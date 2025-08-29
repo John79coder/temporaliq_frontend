@@ -1,3 +1,6 @@
+// ============================================
+// src/utils/storage.ts - UPDATED STORAGE UTILITIES
+// ============================================
 const TOKEN_KEY = 'access_token'
 const REFRESH_TOKEN_KEY = 'refresh_token'
 const USER_KEY = 'user_data'
@@ -44,5 +47,22 @@ export const setStoredUser = (user: any): void => {
         localStorage.setItem(USER_KEY, JSON.stringify(user))
     } catch (error) {
         console.error('Error storing user:', error)
+    }
+}
+
+export const getRefreshToken = (): string | null => {
+    try {
+        return localStorage.getItem(REFRESH_TOKEN_KEY)
+    } catch (error) {
+        console.error('Error reading refresh token:', error)
+        return null
+    }
+}
+
+export const setRefreshToken = (token: string): void => {
+    try {
+        localStorage.setItem(REFRESH_TOKEN_KEY, token)
+    } catch (error) {
+        console.error('Error storing refresh token:', error)
     }
 }

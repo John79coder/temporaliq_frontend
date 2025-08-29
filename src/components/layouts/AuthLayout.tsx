@@ -1,3 +1,6 @@
+// ============================================
+// src/components/layouts/AuthLayout.tsx - FIXED VERSION
+// ============================================
 import React from 'react'
 import { Outlet } from 'react-router-dom'
 import { APP_NAME, APP_TAGLINE } from '@/utils/constants'

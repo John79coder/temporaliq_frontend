@@ -1,25 +1,33 @@
-import React from 'react'
+// src/App.tsx
+
+import { debugLogger } from '@/api/debugHelpers';
+import { csrfManager } from '@/api/csrf';
+
+import React, { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'react-hot-toast'
 import { useAuthStore } from '@/stores/authStore'
 
-// Pages
+// Import Layouts
+import AuthLayout from '@/components/layouts/AuthLayout'
+import AppLayout from '@/components/layouts/AppLayout'
+
+// Import Pages
 import SignIn from '@/pages/SignIn'
-import Onboarding from '@/pages/Onboarding'
+import SignUp from '@/pages/SignUp'
+import VerifyEmail from '@/pages/VerifyEmail'
 import Dashboard from '@/pages/Dashboard'
+import Onboarding from '@/pages/Onboarding'
 import Settings from '@/pages/Settings'
 import Success from '@/pages/Success'
-
-// Layouts
-import AppLayout from '@/components/layouts/AppLayout'
-import AuthLayout from '@/components/layouts/AuthLayout'
 
 const queryClient = new QueryClient({
     defaultOptions: {
         queries: {
             retry: 1,
             refetchOnWindowFocus: false,
+            staleTime: 5 * 60 * 1000,
         },
     },
 })
@@ -31,7 +39,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
     if (isLoading) {
         return (
             <div className="flex h-screen items-center justify-center">
-                <div className="h-8 w-8 animate-spin rounded-full border-2 border-apple-blue border-t-transparent" />
+                <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
             </div>
         )
     }
@@ -44,16 +52,64 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 }
 
 function App() {
+    const [appReady, setAppReady] = useState(false)
+
+    useEffect(() => {
+        console.log('[App] Initializing application');
+        console.log('[App] Environment:', import.meta.env.MODE);
+        console.log('[App] API URL:', import.meta.env.VITE_API_URL || 'http://localhost:8000');
+        console.log('[App] Initial cookies:', document.cookie);
+
+        // Check for existing session
+        const existingToken = localStorage.getItem('access_token');
+        console.log('[App] Existing auth token:', existingToken ? 'present' : 'none');
+
+        // Don't pre-fetch CSRF - let interceptor handle it on first request
+        setAppReady(true);
+
+        // === New Debug Logging System ===
+        console.log('🚀 Initializing debug logging');
+        debugLogger.testCookiePersistence();
+
+        (window as any).debugCommands = {
+            testCookies: () => debugLogger.testCookiePersistence(),
+            showLogs: () => console.table(debugLogger.exportLogs().logs),
+            clearLogs: () => debugLogger.clearLogs(),
+            getCookies: () => document.cookie,
+            getCSRFInfo: () => csrfManager.getDebugInfo(),
+        };
+
+        console.log('📋 Debug commands available:');
+        console.log('  window.debugCommands.testCookies()');
+        console.log('  window.debugCommands.showLogs()');
+        console.log('  window.debugCommands.clearLogs()');
+        console.log('  window.debugCommands.getCookies()');
+        console.log('  window.debugCommands.getCSRFInfo()');
+    }, []);
+
+
+    if (!appReady) {
+        return (
+            <div className="flex h-screen items-center justify-center">
+                <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+            </div>
+        )
+    }
+
     return (
         <QueryClientProvider client={queryClient}>
             <BrowserRouter>
                 <Routes>
-                    {/* Auth Routes */}
+                    {/* Auth routes with AuthLayout */}
                     <Route element={<AuthLayout />}>
                         <Route path="/signin" element={<SignIn />} />
+                        <Route path="/signup" element={<SignUp />} />
                     </Route>
 
-                    {/* Protected Routes */}
+                    {/* Verify email - no layout */}
+                    <Route path="/verify-email" element={<VerifyEmail />} />
+
+                    {/* App routes with AppLayout */}
                     <Route element={<AppLayout />}>
                         <Route
                             path="/"
@@ -97,6 +153,18 @@ function App() {
                     style: {
                         background: '#1D1D1F',
                         color: '#fff',
+                    },
+                    success: {
+                        iconTheme: {
+                            primary: '#10B981',
+                            secondary: '#fff',
+                        },
+                    },
+                    error: {
+                        iconTheme: {
+                            primary: '#EF4444',
+                            secondary: '#fff',
+                        },
                     },
                 }}
             />
