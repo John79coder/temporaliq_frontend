@@ -4,6 +4,12 @@ import { csrfManager } from './csrf'
 import type { AuthResponse, SignInCredentials, SignUpCredentials, User } from '@/types/auth'
 import { API_ENDPOINTS } from '@/utils/constants'
 
+interface ResetPasswordResponse {
+    message: string
+    user?: User
+    jwt?: string
+}
+
 // Debug helper
 const logAuthAction = (action: string, data?: any) => {
     console.log(`[AUTH] ${action}`, {
@@ -163,12 +169,13 @@ export const requestPasswordReset = async (email: string): Promise<void> => {
     }
 }
 
-export const resetPassword = async (token: string, newPassword: string): Promise<void> => {
+export const resetPassword = async (token: string, newPassword: string): Promise<ResetPasswordResponse> => {
     logAuthAction('Resetting password', { tokenPrefix: token.substring(0, 10) })
 
     try {
-        await apiClient.post(
-            API_ENDPOINTS.AUTH.RESET_PASSWORD,
+        // Use the /reset-password/confirm endpoint specifically for password reset confirmation
+        const { data } = await apiClient.post(
+            '/auth/reset-password/confirm',
             {
                 token,
                 new_password: newPassword
@@ -176,6 +183,8 @@ export const resetPassword = async (token: string, newPassword: string): Promise
         )
 
         logAuthAction('Password reset successful')
+
+        return data
     } catch (error: any) {
         logAuthAction('Password reset failed', {
             error: error.message,
@@ -185,7 +194,7 @@ export const resetPassword = async (token: string, newPassword: string): Promise
         if (error.response?.data?.detail) {
             throw new Error(error.response.data.detail)
         }
-        throw new Error('Failed to reset password')
+        throw new Error('Failed to reset password. The link may be expired or invalid.')
     }
 }
 

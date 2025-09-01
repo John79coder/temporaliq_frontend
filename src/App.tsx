@@ -16,11 +16,46 @@ import AppLayout from '@/components/layouts/AppLayout'
 // Import Pages
 import SignIn from '@/pages/SignIn'
 import SignUp from '@/pages/SignUp'
+import ForgotPassword from '@/pages/ForgotPassword'
+import ResetPassword from '@/pages/ResetPassword'
 import VerifyEmail from '@/pages/VerifyEmail'
 import Dashboard from '@/pages/Dashboard'
 import Onboarding from '@/pages/Onboarding'
 import Settings from '@/pages/Settings'
 import Success from '@/pages/Success'
+
+// Wait until the auth store (Zustand + persist) finishes hydrating
+function useAuthHydrated() {
+    // NOTE: this relies on Zustand persists runtime API
+    const store = useAuthStore as any;
+
+    // If the store isn't persisted, we're "ready" immediately
+    const [ready, setReady] = React.useState<boolean>(() => !('persist' in store));
+
+    React.useEffect(() => {
+        if (!('persist' in store)) {
+            setReady(true);
+            return;
+        }
+
+        // If already hydrated, mark ready, otherwise subscribe & trigger rehydrate.
+        if (store.persist?.hasHydrated?.()) {
+            setReady(true);
+            return;
+        }
+
+        const unsub = store.persist.onFinishHydration(() => setReady(true));
+        store.persist.rehydrate?.();
+
+        return () => {
+            // Zustand returns a cleanup fn from onFinishHydration in recent versions
+            try { unsub && unsub(); } catch {}
+        };
+    }, []);
+
+    return ready;
+}
+
 
 const queryClient = new QueryClient({
     defaultOptions: {
@@ -31,6 +66,9 @@ const queryClient = new QueryClient({
         },
     },
 })
+
+
+
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -52,6 +90,8 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 }
 
 function App() {
+    const authReady = useAuthHydrated();
+
     const [appReady, setAppReady] = useState(false)
 
     useEffect(() => {
@@ -88,7 +128,7 @@ function App() {
     }, []);
 
 
-    if (!appReady) {
+    if (!appReady || !authReady) {
         return (
             <div className="flex h-screen items-center justify-center">
                 <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
@@ -104,10 +144,12 @@ function App() {
                     <Route element={<AuthLayout />}>
                         <Route path="/signin" element={<SignIn />} />
                         <Route path="/signup" element={<SignUp />} />
+                        <Route path="/forgot-password" element={<ForgotPassword />} />
                     </Route>
 
-                    {/* Verify email - no layout */}
+                    {/* Verify email and reset password - no layout */}
                     <Route path="/verify-email" element={<VerifyEmail />} />
+                    <Route path="/reset-password" element={<ResetPassword />} />
 
                     {/* App routes with AppLayout */}
                     <Route element={<AppLayout />}>

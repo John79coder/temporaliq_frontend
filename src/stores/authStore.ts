@@ -1,89 +1,89 @@
-// ============================================
-// src/stores/authStore.ts - UPDATED WITH PROPER USER MAPPING
-// ============================================
 import { create } from 'zustand'
-import { devtools } from 'zustand/middleware'
-import type { User } from '@/types/auth'
+import { persist, createJSONStorage } from 'zustand/middleware'
 
-interface AuthState {
+export type User = {
+    id: number
+    email: string
+    name?: string | null
+}
+
+type AuthState = {
     user: User | null
-    isAuthenticated: boolean
-    isLoading: boolean
     token: string | null
+    /** true when persisted state has been loaded */
+    hydrated: boolean
+    /** internal loading gate for auth bootstrap */
+    isLoading: boolean
+    /** derived flag kept in sync to avoid conditional flicker */
+    isAuthenticated: boolean
 
-    // Actions
+    // actions
+    setHydrated: (v: boolean) => void
+    login: (payload: { user: User; token: string }) => void
+    logout: () => void
     setUser: (user: User | null) => void
     setToken: (token: string | null) => void
-    login: (user: User, token: string) => void
-    logout: () => void
-    setLoading: (loading: boolean) => void
-    updateUser: (updates: Partial<User>) => void
 }
 
 export const useAuthStore = create<AuthState>()(
-    devtools(
-        (set) => ({
+    persist(
+        (set, get) => ({
             user: null,
-            isAuthenticated: false,
-            isLoading: true,
             token: null,
+            hydrated: false,
+            isLoading: true,
+            isAuthenticated: false,
 
-            setUser: (user) => {
-                // Map backend snake_case to frontend camelCase if needed
-                const mappedUser = user ? {
-                    ...user,
-                    isVerified: user.is_verified,
-                    isSubscribed: user.is_subscribed,
-                    isInTrial: user.is_in_trial,
-                    hasUsedFreePreview: user.has_used_free_preview,
-                    createdAt: user.created_at,
-                    updatedAt: user.updated_at,
-                } : null
-
-                set({ user: mappedUser, isAuthenticated: !!user })
-            },
-
-            setToken: (token) => {
-                if (token) {
-                    localStorage.setItem('access_token', token)
-                } else {
-                    localStorage.removeItem('access_token')
-                }
-                set({ token })
-            },
-
-            login: (user, token) => {
-                // Map backend fields
-                const mappedUser = {
-                    ...user,
-                    isVerified: user.is_verified,
-                    isSubscribed: user.is_subscribed,
-                    isInTrial: user.is_in_trial,
-                    hasUsedFreePreview: user.has_used_free_preview,
-                    createdAt: user.created_at,
-                    updatedAt: user.updated_at,
-                }
-
-                localStorage.setItem('access_token', token)
-                set({ user: mappedUser, token, isAuthenticated: true, isLoading: false })
-            },
-
-            logout: () => {
-                localStorage.removeItem('access_token')
-                localStorage.removeItem('refresh_token')
-                localStorage.removeItem('user_data')
-                set({ user: null, token: null, isAuthenticated: false })
-            },
-
-            setLoading: (isLoading) => set({ isLoading }),
-
-            updateUser: (updates) =>
+            setHydrated: (v) =>
                 set((state) => ({
-                    user: state.user ? { ...state.user, ...updates } : null,
+                    hydrated: v,
+                    isLoading: false,
+                    // recompute from persisted values after hydration
+                    isAuthenticated: Boolean(state.token),
+                })),
+
+            login: ({ user, token }) =>
+                set(() => ({
+                    user,
+                    token,
+                    isAuthenticated: true,
+                })),
+
+            logout: () =>
+                set(() => ({
+                    user: null,
+                    token: null,
+                    isAuthenticated: false,
+                })),
+
+            setUser: (user) =>
+                set((state) => ({
+                    user,
+                    isAuthenticated: Boolean(user) || Boolean(state.token),
+                })),
+
+            setToken: (token) =>
+                set(() => ({
+                    token,
+                    isAuthenticated: Boolean(token),
                 })),
         }),
         {
-            name: 'auth-store',
-        }
-    )
+            name: 'auth',
+            storage: createJSONStorage(() => localStorage),
+            // Persist only what’s needed
+            partialize: (state) => ({ user: state.user, token: state.token }),
+            onRehydrateStorage: () => (state, _error) => {
+                // mark the store as ready after rehydration
+                state?.setHydrated(true)
+            },
+        },
+    ),
 )
+
+// Tiny helpers to keep components tidy
+export const useAuthReady = () =>
+    useAuthStore((s) => s.hydrated && !s.isLoading)
+
+export const useIsAuthenticated = () =>
+    useAuthStore((s) => s.isAuthenticated)
