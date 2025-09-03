@@ -1,6 +1,6 @@
 // src/api/client.ts
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios'
-import { getStoredToken, removeStoredToken, setStoredToken } from '@/utils/storage'
+import { getStoredToken, removeStoredToken, setStoredToken, getRefreshToken, setRefreshToken } from '@/utils/storage'
 import { csrfManager } from './csrf'
 
 const API_URL = '';  // Use Vite proxy for same-origin requests in dev
@@ -17,6 +17,20 @@ export const apiClient = axios.create({
     },
     withCredentials: true, // Important for CSRF cookies
 })
+
+// === ENHANCED FOR 2FA: Token refresh queue management ===
+let isRefreshing = false
+let refreshSubscribers: Array<(token: string) => void> = []
+
+const subscribeTokenRefresh = (cb: (token: string) => void) => {
+    refreshSubscribers.push(cb)
+}
+
+const onTokenRefreshed = (token: string) => {
+    refreshSubscribers.forEach((cb) => cb(token))
+    refreshSubscribers = []
+}
+// === END 2FA ENHANCEMENT ===
 
 // Request interceptor for auth token and CSRF
 apiClient.interceptors.request.use(
@@ -116,41 +130,100 @@ apiClient.interceptors.response.use(
             }
         }
 
-        // Handle 401 Unauthorized
+        // === ENHANCED 401 HANDLING FOR 2FA ===
         if (error.response?.status === 401 && !originalRequest._retry) {
+            // Don't refresh for certain endpoints
+            if (originalRequest.url?.includes('/auth/refresh') ||
+                originalRequest.url?.includes('/auth/2fa/verify') ||
+                originalRequest.url?.includes('/auth/login')) {
+                console.log(`[API Response ${requestId}] Skipping refresh for auth endpoint`)
+                removeStoredToken()
+                csrfManager.clearToken()
+
+                // Only redirect if not on auth pages already
+                if (!window.location.pathname.includes('/signin') &&
+                    !window.location.pathname.includes('/signup')) {
+                    window.location.href = '/signin'
+                }
+                return Promise.reject(error)
+            }
+
             originalRequest._retry = true
             console.log(`[API Response ${requestId}] 401 Unauthorized, attempting token refresh`)
 
-            try {
-                const refreshToken = localStorage.getItem('refresh_token')
-                if (refreshToken) {
-                    console.log(`[API Response ${requestId}] Found refresh token, attempting refresh`)
+            // Handle concurrent refresh requests
+            if (!isRefreshing) {
+                isRefreshing = true
 
-                    const response = await axios.post(`${API_URL}/auth/refresh`, {  // Relative path -> Vite proxy
-                        refresh_token: refreshToken,
-                    }, {
-                        withCredentials: true,
-                    })
+                try {
+                    const refreshToken = getRefreshToken() || localStorage.getItem('refresh_token')
+                    if (refreshToken) {
+                        console.log(`[API Response ${requestId}] Found refresh token, attempting refresh`)
 
-                    const { access_token } = response.data
-                    setStoredToken(access_token)
-                    console.log(`[API Response ${requestId}] Token refreshed successfully`)
+                        const response = await axios.post(`${API_URL}/auth/refresh`, {
+                            refresh_token: refreshToken,
+                        }, {
+                            withCredentials: true,
+                        })
 
-                    if (originalRequest.headers) {
-                        originalRequest.headers.Authorization = `Bearer ${access_token}`
+                        const { access_token, refresh_token: new_refresh_token } = response.data
+                        setStoredToken(access_token)
+
+                        if (new_refresh_token) {
+                            setRefreshToken(new_refresh_token)
+                        }
+
+                        console.log(`[API Response ${requestId}] Token refreshed successfully`)
+
+                        // Notify all waiting requests
+                        onTokenRefreshed(access_token)
+                        isRefreshing = false
+
+                        if (originalRequest.headers) {
+                            originalRequest.headers.Authorization = `Bearer ${access_token}`
+                        }
+
+                        return apiClient(originalRequest)
+                    } else {
+                        console.log(`[API Response ${requestId}] No refresh token available`)
+                        isRefreshing = false
                     }
+                } catch (refreshError) {
+                    console.error(`[API Response ${requestId}] Token refresh failed:`, refreshError)
+                    isRefreshing = false
+                    refreshSubscribers = []
+                    removeStoredToken()
+                    csrfManager.clearToken()
 
-                    return apiClient(originalRequest)
-                } else {
-                    console.log(`[API Response ${requestId}] No refresh token available`)
+                    // Only redirect if not on auth pages
+                    if (!window.location.pathname.includes('/signin') &&
+                        !window.location.pathname.includes('/signup')) {
+                        window.location.href = '/signin'
+                    }
+                    return Promise.reject(refreshError)
                 }
-            } catch (refreshError) {
-                console.error(`[API Response ${requestId}] Token refresh failed:`, refreshError)
-                removeStoredToken()
-                csrfManager.clearToken()
-                window.location.href = '/signin'
-                return Promise.reject(refreshError)
+            } else {
+                // Wait for token refresh to complete
+                console.log(`[API Response ${requestId}] Waiting for ongoing token refresh`)
+
+                return new Promise((resolve) => {
+                    subscribeTokenRefresh((token: string) => {
+                        console.log(`[API Response ${requestId}] Got refreshed token, retrying request`)
+                        if (originalRequest.headers) {
+                            originalRequest.headers.Authorization = `Bearer ${token}`
+                        }
+                        resolve(apiClient(originalRequest))
+                    })
+                })
             }
+        }
+        // === END 2FA ENHANCEMENT ===
+
+        // Handle other error statuses
+        if (error.response?.status === 429) {
+            console.error(`[API Response ${requestId}] Rate limit exceeded`)
+        } else if (error.response?.status === 500) {
+            console.error(`[API Response ${requestId}] Server error`)
         }
 
         return Promise.reject(error)
@@ -162,3 +235,5 @@ if (import.meta.env.DEV) {
     (window as any).apiClient = apiClient
     console.log('[API Client] Debug: window.apiClient available for inspection')
 }
+
+export default apiClient

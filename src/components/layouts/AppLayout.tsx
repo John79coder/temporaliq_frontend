@@ -1,10 +1,10 @@
 // ============================================
 // src/components/layouts/AppLayout.tsx - PRODUCTION VERSION
 // ============================================
-import React, { useEffect } from 'react'
+import React, { useEffect, useRef } from 'react'
 import { Outlet, useNavigate, Link, useLocation } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
-import { getCurrentUser } from '@/api/auth'
+import { logout as apiLogout } from '@/api/auth'
 import { getStoredToken, getStoredUser, setStoredUser, removeStoredToken } from '@/utils/storage'
 import { cn } from '@/utils/cn'
 import toast from 'react-hot-toast'
@@ -12,15 +12,23 @@ import toast from 'react-hot-toast'
 const AppLayout: React.FC = () => {
     const navigate = useNavigate()
     const location = useLocation()
-    const { user, setUser, setLoading, logout } = useAuthStore()
+    const { user, setUser, setLoading, logout, login } = useAuthStore()
+
+    // Prevent dev-mode double execution of the bootstrap effect
+    const initRanRef = useRef(false)
 
     useEffect(() => {
+        if (initRanRef.current) return
+        initRanRef.current = true
+
         const initAuth = async () => {
+            setLoading(true)
+
             const token = getStoredToken()
 
             if (!token) {
                 setLoading(false)
-                navigate('/signin')
+                // no navigate here; allow route guards to decide
                 return
             }
 
@@ -30,7 +38,7 @@ const AppLayout: React.FC = () => {
                 // Browser was closed and reopened
                 removeStoredToken()
                 setLoading(false)
-                navigate('/signin')
+                // no navigate here; allow route guards to decide
                 return
             }
 
@@ -44,33 +52,32 @@ const AppLayout: React.FC = () => {
                     setUser(storedUser)
                 }
 
-                // Then fetch fresh data from backend
-                const currentUser = await getCurrentUser()
-                setUser(currentUser)
+                // Update auth store with fresh user data and token
+                login({ user: currentUser, token })
                 setStoredUser(currentUser)
 
                 // Check if user needs to verify email
                 if (!currentUser.is_verified) {
                     toast.error('Please verify your email to continue')
-                    navigate('/verify-email')
+                    // no navigate here; allow route guards to decide
                 }
             } catch (error: any) {
                 console.error('Failed to fetch user:', error)
 
-                if (error.message === 'Unauthorized') {
+                if (error.response?.status === 401 || error.message === 'Unauthorized') {
                     // Token is invalid
                     removeStoredToken()
                     logout()
-                    navigate('/signin')
+                    // no navigate here; allow route guards to decide
                 } else {
                     // Network error - try to use stored user
                     const storedUser = getStoredUser()
-                    if (storedUser) {
-                        setUser(storedUser)
+                    if (storedUser && token) {
+                        login({ user: storedUser, token })
                     } else {
                         // No stored user, must re-authenticate
                         logout()
-                        navigate('/signin')
+                        // no navigate here; allow route guards to decide
                     }
                 }
             } finally {
@@ -83,11 +90,13 @@ const AppLayout: React.FC = () => {
 
     const handleLogout = async () => {
         try {
-            await logout()
+            // Call API logout
+            await apiLogout()
         } catch (error) {
             console.error('Logout error:', error)
         } finally {
             // Always clear local data and redirect
+            logout()
             removeStoredToken()
             sessionStorage.clear()
             toast.success('Logged out successfully')
@@ -98,6 +107,7 @@ const AppLayout: React.FC = () => {
     const navItems = [
         { path: '/', label: 'Dashboard', icon: '📊' },
         { path: '/settings', label: 'Settings', icon: '⚙️' },
+        { path: '/settings/security', label: 'Security', icon: '🔒' },
     ]
 
     return (
@@ -141,13 +151,14 @@ const AppLayout: React.FC = () => {
                                     <div className="text-right hidden sm:block">
                                         <p className="text-sm font-medium text-gray-900">{user.name || user.email}</p>
                                         <p className="text-xs text-gray-500">
-                                            {user.isInTrial ? 'Trial' : user.isSubscribed ? 'Pro' : 'Free'}
+                                            {user.two_factor_enabled ? '🔐 2FA' : ''}
+                                            {user.isInTrial ? ' Trial' : user.isSubscribed ? ' Pro' : ' Free'}
                                         </p>
                                     </div>
                                     <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
-                    <span className="text-sm font-medium text-gray-600">
-                      {(user.name || user.email).charAt(0).toUpperCase()}
-                    </span>
+                                        <span className="text-sm font-medium text-gray-600">
+                                            {(user.name || user.email).charAt(0).toUpperCase()}
+                                        </span>
                                     </div>
                                 </div>
                             )}

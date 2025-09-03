@@ -73,7 +73,7 @@ export const EmailSignInForm: React.FC = () => {
             }
 
             // Update auth store
-            login(response.user, response.access_token)
+            login({ user: response.user, token: response.access_token })
 
             // Handle remember me
             if (!rememberMe) {

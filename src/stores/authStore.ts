@@ -5,6 +5,10 @@ export type User = {
     id: number
     email: string
     name?: string | null
+    is_verified?: boolean
+    two_factor_enabled?: boolean
+    isInTrial?: boolean
+    isSubscribed?: boolean
 }
 
 type AuthState = {
@@ -23,6 +27,7 @@ type AuthState = {
     logout: () => void
     setUser: (user: User | null) => void
     setToken: (token: string | null) => void
+    setLoading: (loading: boolean) => void
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -47,6 +52,7 @@ export const useAuthStore = create<AuthState>()(
                     user,
                     token,
                     isAuthenticated: true,
+                    isLoading: false,
                 })),
 
             logout: () =>
@@ -54,6 +60,7 @@ export const useAuthStore = create<AuthState>()(
                     user: null,
                     token: null,
                     isAuthenticated: false,
+                    isLoading: false,
                 })),
 
             setUser: (user) =>
@@ -66,6 +73,11 @@ export const useAuthStore = create<AuthState>()(
                 set(() => ({
                     token,
                     isAuthenticated: Boolean(token),
+                })),
+
+            setLoading: (loading) =>
+                set(() => ({
+                    isLoading: loading,
                 })),
         }),
         {

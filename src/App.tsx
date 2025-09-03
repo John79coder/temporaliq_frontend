@@ -24,6 +24,11 @@ import Onboarding from '@/pages/Onboarding'
 import Settings from '@/pages/Settings'
 import Success from '@/pages/Success'
 
+// Import new 2FA and Security components
+import { SecuritySettings } from '@/pages/settings/SecuritySettings'
+import { TwoFactorSetup } from '@/components/auth/TwoFactorSetup'
+import { TwoFactorVerify } from '@/components/auth/TwoFactorVerify'
+
 // Wait until the auth store (Zustand + persist) finishes hydrating
 function useAuthHydrated() {
     // NOTE: this relies on Zustand persists runtime API
@@ -72,7 +77,7 @@ const queryClient = new QueryClient({
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const { isAuthenticated, isLoading } = useAuthStore()
+    const { isAuthenticated, isLoading, user } = useAuthStore()
 
     if (isLoading) {
         return (
@@ -84,6 +89,11 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 
     if (!isAuthenticated) {
         return <Navigate to="/signin" replace />
+    }
+
+    // Example: gate users who must verify email first
+    if (user && user.is_verified === false) {
+        return <Navigate to="/verify-email" replace />
     }
 
     return <>{children}</>
@@ -151,6 +161,9 @@ function App() {
                     <Route path="/verify-email" element={<VerifyEmail />} />
                     <Route path="/reset-password" element={<ResetPassword />} />
 
+                    {/* 2FA verification during login - no layout */}
+                    <Route path="/auth/2fa-verify" element={<TwoFactorVerify />} />
+
                     {/* App routes with AppLayout */}
                     <Route element={<AppLayout />}>
                         <Route
@@ -174,6 +187,22 @@ function App() {
                             element={
                                 <ProtectedRoute>
                                     <Settings />
+                                </ProtectedRoute>
+                            }
+                        />
+                        <Route
+                            path="/settings/security"
+                            element={
+                                <ProtectedRoute>
+                                    <SecuritySettings />
+                                </ProtectedRoute>
+                            }
+                        />
+                        <Route
+                            path="/settings/security/2fa-setup"
+                            element={
+                                <ProtectedRoute>
+                                    <TwoFactorSetup />
                                 </ProtectedRoute>
                             }
                         />

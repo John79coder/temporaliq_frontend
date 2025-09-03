@@ -90,7 +90,7 @@ const ResetPassword: React.FC = () => {
             if (response && response.user && response.jwt) {
                 setStoredUser(response.user)
                 setStoredToken(response.jwt)
-                login(response.user, response.jwt)
+                login({ user: response.user, token: response.jwt })
             }
 
             setIsSuccess(true)
