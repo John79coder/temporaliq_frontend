@@ -1,23 +1,44 @@
 // src/utils/storage.ts
 // ============================================
-// UPDATED STORAGE UTILITIES - Enhanced for 2FA and Apple Sign-In
+// UPDATED STORAGE UTILITIES - Fixed for Zustand persistence
 // ============================================
 
 // === EXISTING CONSTANTS ===
 const TOKEN_KEY = 'access_token'
 const REFRESH_TOKEN_KEY = 'refresh_token'
 const USER_KEY = 'user_data'
+const AUTH_STORE_KEY = 'auth' // Zustand persist key
 
 // === NEW CONSTANTS FOR ENHANCED FEATURES ===
 const REMEMBER_ME_KEY = 'remember_me'
 const THEME_KEY = 'theme'
 const PREFERENCES_KEY = 'preferences'
 
-// === EXISTING TOKEN FUNCTIONS (UNCHANGED) ===
+// === FIXED TOKEN FUNCTIONS ===
 export const getStoredToken = (): string | null => {
     try {
-        // Check both localStorage and sessionStorage
-        return localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY)
+        // First check direct storage (for backward compatibility)
+        const directToken = localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY)
+        if (directToken) {
+            return directToken
+        }
+
+        // Then check Zustand persisted auth store
+        const authStoreData = localStorage.getItem(AUTH_STORE_KEY)
+        if (authStoreData) {
+            try {
+                const parsed = JSON.parse(authStoreData)
+                // Zustand persist stores the state in a 'state' property
+                const token = parsed?.state?.token || parsed?.token
+                if (token) {
+                    return token
+                }
+            } catch (e) {
+                console.error('Error parsing auth store data:', e)
+            }
+        }
+
+        return null
     } catch (error) {
         console.error('Error reading token from storage:', error)
         return null
@@ -48,6 +69,22 @@ export const removeStoredToken = (): void => {
         localStorage.removeItem(USER_KEY)
         sessionStorage.removeItem(TOKEN_KEY)
         sessionStorage.removeItem(REFRESH_TOKEN_KEY)
+
+        // Also clear from Zustand persist if needed
+        const authStoreData = localStorage.getItem(AUTH_STORE_KEY)
+        if (authStoreData) {
+            try {
+                const parsed = JSON.parse(authStoreData)
+                if (parsed?.state) {
+                    parsed.state.token = null
+                    parsed.state.isAuthenticated = false
+                    localStorage.setItem(AUTH_STORE_KEY, JSON.stringify(parsed))
+                }
+            } catch (e) {
+                // If we can't parse it, just remove it
+                localStorage.removeItem(AUTH_STORE_KEY)
+            }
+        }
     } catch (error) {
         console.error('Error removing tokens:', error)
     }
@@ -56,8 +93,27 @@ export const removeStoredToken = (): void => {
 // === EXISTING USER FUNCTIONS (UNCHANGED) ===
 export const getStoredUser = (): any => {
     try {
-        const userStr = localStorage.getItem(USER_KEY) || sessionStorage.getItem(USER_KEY)
-        return userStr ? JSON.parse(userStr) : null
+        // First check direct storage
+        const directUser = localStorage.getItem(USER_KEY) || sessionStorage.getItem(USER_KEY)
+        if (directUser) {
+            return JSON.parse(directUser)
+        }
+
+        // Then check Zustand persisted auth store
+        const authStoreData = localStorage.getItem(AUTH_STORE_KEY)
+        if (authStoreData) {
+            try {
+                const parsed = JSON.parse(authStoreData)
+                const user = parsed?.state?.user || parsed?.user
+                if (user) {
+                    return user
+                }
+            } catch (e) {
+                console.error('Error parsing auth store data for user:', e)
+            }
+        }
+
+        return null
     } catch (error) {
         console.error('Error reading user from storage:', error)
         return null
@@ -120,6 +176,9 @@ export const clearAuthData = (): void => {
         sessionStorage.removeItem('2fa_temp_token')
         sessionStorage.removeItem('2fa_user')
         sessionStorage.removeItem('intended_path')
+
+        // Clear Zustand persisted auth
+        localStorage.removeItem(AUTH_STORE_KEY)
     } catch (error) {
         console.error('Error clearing auth data:', error)
     }
@@ -181,5 +240,27 @@ export const setStoredPreferences = (preferences: Record<string, any>): void => 
         localStorage.setItem(PREFERENCES_KEY, JSON.stringify(preferences))
     } catch (error) {
         console.error('Error storing preferences:', error)
+    }
+}
+
+// Helper to sync auth store with direct storage (for migration)
+export const syncAuthStorage = (): void => {
+    try {
+        const authStoreData = localStorage.getItem(AUTH_STORE_KEY)
+        if (authStoreData) {
+            const parsed = JSON.parse(authStoreData)
+            const token = parsed?.state?.token || parsed?.token
+            const user = parsed?.state?.user || parsed?.user
+
+            // Sync to direct storage for backward compatibility
+            if (token && !localStorage.getItem(TOKEN_KEY)) {
+                localStorage.setItem(TOKEN_KEY, token)
+            }
+            if (user && !localStorage.getItem(USER_KEY)) {
+                localStorage.setItem(USER_KEY, JSON.stringify(user))
+            }
+        }
+    } catch (error) {
+        console.error('Error syncing auth storage:', error)
     }
 }
