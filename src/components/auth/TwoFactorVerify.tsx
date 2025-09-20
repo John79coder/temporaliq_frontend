@@ -59,22 +59,33 @@ export const TwoFactorVerify: React.FC = () => {
             sessionStorage.removeItem('2fa_temp_token')
             sessionStorage.removeItem('2fa_user')
 
+            // CRITICAL FIX: Use access_token from response, not jwt
+            // The verify2FA function returns { user, access_token, refresh_token }
+            const token = response.access_token
+
+            if (!token) {
+                console.error('No token received from 2FA verification')
+                throw new Error('Authentication token missing')
+            }
+
             // Store authentication data
             setStoredUser(response.user)
-            setStoredToken(response.jwt)
+            setStoredToken(token)
 
-            // Update auth store
-            login({ user: response.user, token: response.jwt })
+            // Update auth store with both user AND token
+            login({ user: response.user, token: token })
 
             toast.success('Successfully authenticated!')
 
-            // Navigate to dashboard or intended destination
+            // Navigate to home page or intended destination
+            // Using '/' instead of '/dashboard' which may not exist
             const intendedPath = sessionStorage.getItem('intended_path')
             if (intendedPath) {
                 sessionStorage.removeItem('intended_path')
                 navigate(intendedPath)
             } else {
-                navigate('/dashboard')
+                // Navigate to home instead of dashboard
+                navigate('/')
             }
         } catch (error: any) {
             console.error('2FA verification failed:', error)

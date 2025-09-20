@@ -437,12 +437,13 @@ export const disable2FA = async (): Promise<{ message: string }> => {
     }
 }
 
+
 export const getBackupCodesInfo = async (): Promise<{ codes_remaining: number; two_factor_enabled: boolean }> => {
     logAuthAction('Fetching backup codes info')
 
     try {
         const response = await apiClient.get('/auth/2fa/backup-codes')
-        logAuthAction('Backup codes info received')
+        logAuthAction('Backup codes info received', response.data)
         return response.data
     } catch (error: any) {
         logAuthAction('Failed to fetch backup codes info', {
@@ -450,15 +451,17 @@ export const getBackupCodesInfo = async (): Promise<{ codes_remaining: number; t
             response: error.response?.data
         })
 
-        // If it's a 400 (not 401), it means user doesn't have 2FA enabled
-        if (error.response?.status === 400) {
-            return { codes_remaining: 0, two_factor_enabled: false }
+        // Only re-throw 401 errors for re-authentication
+        if (error.response?.status === 401) {
+            throw error
         }
 
-        // Let 401 errors bubble up to trigger re-auth
-        throw error
+        // For any other error, return safe defaults
+        console.error('Error fetching 2FA status, defaulting to disabled')
+        return { codes_remaining: 0, two_factor_enabled: false }
     }
 }
+
 
 export const regenerateBackupCodes = async (): Promise<{ message: string; backup_codes: string[] }> => {
     logAuthAction('Regenerating backup codes')

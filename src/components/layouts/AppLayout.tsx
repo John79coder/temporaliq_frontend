@@ -1,6 +1,4 @@
-// ============================================
-// src/components/layouts/AppLayout.tsx - PRODUCTION VERSION
-// ============================================
+// src/components/layouts/AppLayout.tsx
 import React, { useEffect, useRef } from 'react'
 import { Outlet, useNavigate, Link, useLocation } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
@@ -53,11 +51,11 @@ const AppLayout: React.FC = () => {
                 }
 
                 // Update auth store with fresh user data and token
-                login({ user: currentUser, token })
-                setStoredUser(currentUser)
+                login({ user: storedUser, token })
+                setStoredUser(storedUser)
 
                 // Check if user needs to verify email
-                if (!currentUser.is_verified) {
+                if (!storedUser?.is_verified) {
                     toast.error('Please verify your email to continue')
                     // no navigate here; allow route guards to decide
                 }
@@ -107,15 +105,39 @@ const AppLayout: React.FC = () => {
     const navItems = [
         { path: '/', label: 'Dashboard', icon: '📊' },
         { path: '/settings', label: 'Settings', icon: '⚙️' },
-        { path: '/settings/security', label: 'Security', icon: '🔒' },
+        { path: '/settings/security', label: 'Security', icon: '🔐' },
     ]
 
+    // Helper function to format user status
+    const getUserStatus = () => {
+        if (!user) return ''
+
+        const parts = []
+
+        // Add 2FA indicator if enabled
+        if (user.two_factor_enabled) {
+            parts.push('🔐 2FA')
+        }
+
+        // Add subscription status
+        if (user.isInTrial) {
+            parts.push('Trial')
+        } else if (user.isSubscribed) {
+            parts.push('Pro')
+        } else {
+            parts.push('Free')
+        }
+
+        return parts.join(' • ')
+    }
+
     return (
-        <div className="min-h-screen bg-apple-background">
+        <div className="min-h-screen bg-gray-50">
             {/* Navigation */}
-            <nav className="sticky top-0 z-50 border-b border-gray-200 bg-white/80 backdrop-blur-xl">
+            <nav className="bg-white shadow-sm border-b border-gray-200">
                 <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                     <div className="flex h-16 items-center justify-between">
+                        {/* Logo and Nav Items */}
                         <div className="flex items-center space-x-8">
                             <Link to="/" className="flex items-center space-x-2">
                                 <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
@@ -123,36 +145,38 @@ const AppLayout: React.FC = () => {
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                     </svg>
                                 </div>
-                                <span className="font-semibold text-lg">SmartScheduler</span>
+                                <span className="text-xl font-semibold">SmartScheduler</span>
                             </Link>
 
-                            <div className="hidden md:flex items-center space-x-1">
+                            <div className="flex space-x-4">
                                 {navItems.map((item) => (
                                     <Link
                                         key={item.path}
                                         to={item.path}
                                         className={cn(
-                                            'px-3 py-2 rounded-lg text-sm font-medium transition-colors',
+                                            'px-3 py-2 text-sm font-medium rounded-md transition-colors',
                                             location.pathname === item.path
-                                                ? 'bg-gray-100 text-gray-900'
-                                                : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                                                ? 'bg-blue-50 text-blue-700'
+                                                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                                         )}
                                     >
-                                        <span className="mr-2">{item.icon}</span>
+                                        <span className="mr-1">{item.icon}</span>
                                         {item.label}
                                     </Link>
                                 ))}
                             </div>
                         </div>
 
+                        {/* User Menu */}
                         <div className="flex items-center space-x-4">
                             {user && (
                                 <div className="flex items-center space-x-3">
-                                    <div className="text-right hidden sm:block">
-                                        <p className="text-sm font-medium text-gray-900">{user.name || user.email}</p>
+                                    <div className="text-right">
+                                        <p className="text-sm font-medium text-gray-900">
+                                            {user.name || user.email}
+                                        </p>
                                         <p className="text-xs text-gray-500">
-                                            {user.two_factor_enabled ? '🔐 2FA' : ''}
-                                            {user.isInTrial ? ' Trial' : user.isSubscribed ? ' Pro' : ' Free'}
+                                            {getUserStatus()}
                                         </p>
                                     </div>
                                     <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">

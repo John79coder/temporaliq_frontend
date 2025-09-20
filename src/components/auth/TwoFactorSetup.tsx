@@ -18,7 +18,7 @@ interface SetupData {
 
 export const TwoFactorSetup: React.FC = () => {
     const navigate = useNavigate()
-    const { isAuthenticated, token } = useAuthStore()
+    const { isAuthenticated, token, hydrated, isLoading: authLoading, user, setUser } = useAuthStore()
     const [step, setStep] = useState<'intro' | 'setup' | 'verify' | 'backup'>('intro')
     const [setupData, setSetupData] = useState<SetupData | null>(null)
     const [verificationCode, setVerificationCode] = useState('')
@@ -27,20 +27,25 @@ export const TwoFactorSetup: React.FC = () => {
     const [showSecret, setShowSecret] = useState(false)
 
     useEffect(() => {
-        // Check authentication on mount
+        // Wait for auth store to be hydrated before checking authentication
+        if (!hydrated || authLoading) {
+            return // Wait for hydration to complete
+        }
+
+        // Check authentication after hydration
         if (!isAuthenticated || !token) {
             console.warn('[TwoFactorSetup] User not authenticated, redirecting to login')
             toast.error('Please login first to setup 2FA')
             navigate('/signin', { replace: true })
         }
-    }, [isAuthenticated, token, navigate])
+    }, [isAuthenticated, token, navigate, hydrated, authLoading])
 
     useEffect(() => {
         // Start setup when component mounts and user moves to setup step
-        if (step === 'setup' && isAuthenticated && token) {
+        if (step === 'setup' && isAuthenticated && token && hydrated) {
             initializeSetup()
         }
-    }, [step, isAuthenticated, token])
+    }, [step, isAuthenticated, token, hydrated])
 
     const initializeSetup = async () => {
         // Double-check authentication
@@ -93,6 +98,29 @@ export const TwoFactorSetup: React.FC = () => {
                 setBackupCodes(response.backup_codes)
                 setStep('backup')
                 toast.success('2FA enabled successfully!')
+
+                // CRITICAL: Update the user object in the auth store
+                if (user) {
+                    const updatedUser = {
+                        ...user,
+                        two_factor_enabled: true
+                    }
+                    setUser(updatedUser)
+
+                    // Also update in localStorage to persist
+                    const authData = localStorage.getItem('auth')
+                    if (authData) {
+                        try {
+                            const parsed = JSON.parse(authData)
+                            if (parsed.state) {
+                                parsed.state.user = updatedUser
+                                localStorage.setItem('auth', JSON.stringify(parsed))
+                            }
+                        } catch (e) {
+                            console.error('Failed to update auth storage:', e)
+                        }
+                    }
+                }
             }
         } catch (error: any) {
             console.error('2FA verification failed:', error)
@@ -140,9 +168,15 @@ Store these codes in a secure location. You will need them if you lose access to
         navigate('/settings/security')
     }
 
-    // Don't render if not authenticated
-    if (!isAuthenticated || !token) {
-        return null
+    // Don't render if not authenticated or still loading
+    if (!hydrated || authLoading || (!isAuthenticated && !token)) {
+        return (
+            <div className="max-w-2xl mx-auto p-6">
+                <div className="flex justify-center items-center h-64">
+                    <div className="animate-spin rounded-full h-8 w-8 border-2 border-blue-600 border-t-transparent"></div>
+                </div>
+            </div>
+        )
     }
 
     return (

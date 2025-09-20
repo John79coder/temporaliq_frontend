@@ -15,35 +15,46 @@ interface SecurityInfo {
 
 export const SecuritySettings: React.FC = () => {
     const navigate = useNavigate()
-    const { user, isAuthenticated, token } = useAuthStore()
+    const { user, isAuthenticated, token, hydrated, isLoading: authLoading } = useAuthStore()
     const [securityInfo, setSecurityInfo] = useState<SecurityInfo | null>(null)
     const [isLoading, setIsLoading] = useState(true)
     const [showDisableConfirm, setShowDisableConfirm] = useState(false)
     const [showBackupCodes, setShowBackupCodes] = useState(false)
     const [newBackupCodes, setNewBackupCodes] = useState<string[]>([])
 
-    useEffect(() => {
-        // Only load security info if user is authenticated
-        if (isAuthenticated && token) {
-            loadSecurityInfo()
-        } else {
-            // Redirect to login if not authenticated
-            console.warn('[SecuritySettings] User not authenticated, redirecting to login')
-            navigate('/signin', { replace: true })
-        }
-    }, [isAuthenticated, token, navigate])
+    // Add debug state
+    const [debugInfo, setDebugInfo] = useState<any>({})
 
     const loadSecurityInfo = async () => {
-        // Double-check authentication before making API call
+        console.log('[SecuritySettings] loadSecurityInfo called', {
+            isAuthenticated,
+            hasToken: !!token,
+            user,
+            userFrom2FA: user?.two_factor_enabled
+        })
+
+        // Don't try to load if not authenticated
         if (!isAuthenticated || !token) {
             console.error('[SecuritySettings] Cannot load security info - user not authenticated')
             setIsLoading(false)
             return
         }
 
+        setIsLoading(true)
         try {
+            console.log('[SecuritySettings] Calling getBackupCodesInfo...')
             const info = await getBackupCodesInfo()
+            console.log('[SecuritySettings] Received security info:', info)
+
             setSecurityInfo(info)
+
+            // Update debug info
+            setDebugInfo({
+                userStore2FA: user?.two_factor_enabled,
+                apiResponse2FA: info.two_factor_enabled,
+                mismatch: user?.two_factor_enabled !== info.two_factor_enabled,
+                timestamp: new Date().toISOString()
+            })
         } catch (error: any) {
             console.error('Failed to load security info:', error)
 
@@ -54,12 +65,54 @@ export const SecuritySettings: React.FC = () => {
                 return
             }
 
-            // If 2FA is not enabled, the API might return an error
+            // For other errors, set default state
             setSecurityInfo({ two_factor_enabled: false, codes_remaining: 0 })
+            setDebugInfo({
+                error: error.message,
+                timestamp: new Date().toISOString()
+            })
         } finally {
             setIsLoading(false)
         }
     }
+
+    useEffect(() => {
+        console.log('[SecuritySettings] useEffect triggered', {
+            hydrated,
+            authLoading,
+            isAuthenticated,
+            hasToken: !!token,
+            user
+        })
+
+        // Wait for auth store to be hydrated
+        if (!hydrated || authLoading) {
+            console.log('[SecuritySettings] Waiting for hydration...')
+            return // Wait for hydration to complete
+        }
+
+        // Once hydrated, check authentication and load security info
+        if (isAuthenticated && token) {
+            console.log('[SecuritySettings] Authenticated, loading security info...')
+            loadSecurityInfo()
+        } else {
+            console.log('[SecuritySettings] Not authenticated after hydration')
+            // Not authenticated after hydration
+            setIsLoading(false)
+        }
+    }, [hydrated, authLoading, isAuthenticated, token])
+
+    // Also update the user's 2FA status when returning from setup
+    useEffect(() => {
+        if (user && securityInfo && user.two_factor_enabled !== securityInfo.two_factor_enabled) {
+            console.log('[SecuritySettings] 2FA status mismatch detected, updating user store')
+            // Update user object if 2FA status has changed
+            useAuthStore.getState().setUser({
+                ...user,
+                two_factor_enabled: securityInfo.two_factor_enabled
+            })
+        }
+    }, [user, securityInfo])
 
     const handleEnable2FA = () => {
         // Verify authentication before navigating to 2FA setup
@@ -84,6 +137,14 @@ export const SecuritySettings: React.FC = () => {
             toast.success('Two-factor authentication disabled')
             setSecurityInfo({ two_factor_enabled: false, codes_remaining: 0 })
             setShowDisableConfirm(false)
+
+            // Update user in store
+            if (user) {
+                useAuthStore.getState().setUser({
+                    ...user,
+                    two_factor_enabled: false
+                })
+            }
         } catch (error: any) {
             console.error('Failed to disable 2FA:', error)
 
@@ -150,8 +211,8 @@ Store these codes in a secure location. You will need them if you lose access to
         URL.revokeObjectURL(url)
     }
 
-    // Show loading while checking authentication
-    if (isLoading) {
+    // Show loading while checking authentication or loading security info
+    if (!hydrated || authLoading || isLoading) {
         return (
             <div className="max-w-4xl mx-auto">
                 <h1 className="text-2xl font-bold text-gray-900 mb-8">Security Settings</h1>
@@ -170,6 +231,35 @@ Store these codes in a secure location. You will need them if you lose access to
     return (
         <div className="max-w-4xl mx-auto">
             <h1 className="text-2xl font-bold text-gray-900 mb-8">Security Settings</h1>
+
+            {/* Debug Info Panel - Remove this in production */}
+            {import.meta.env.MODE === 'development' && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-6">
+                    <h3 className="font-semibold text-yellow-800 mb-2">Debug Info</h3>
+                    <div className="text-xs font-mono text-yellow-700 space-y-1">
+                        <div>Auth Store User 2FA: {String(user?.two_factor_enabled)}</div>
+                        <div>API Response 2FA: {String(securityInfo?.two_factor_enabled)}</div>
+                        <div>Codes Remaining: {securityInfo?.codes_remaining ?? 'N/A'}</div>
+                        <div>Mismatch: {String(debugInfo.mismatch)}</div>
+                        <div>Last Updated: {debugInfo.timestamp}</div>
+                        <div>Hydrated: {String(hydrated)}</div>
+                        <div>Authenticated: {String(isAuthenticated)}</div>
+                        <div>User ID: {user?.id}</div>
+                        {debugInfo.error && <div className="text-red-600">Error: {debugInfo.error}</div>}
+                    </div>
+                    <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => {
+                            console.log('[Manual Refresh] Triggered')
+                            loadSecurityInfo()
+                        }}
+                        className="mt-3"
+                    >
+                        Refresh Status (Debug)
+                    </Button>
+                </div>
+            )}
 
             {/* Two-Factor Authentication Section */}
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">

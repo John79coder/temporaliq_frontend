@@ -65,15 +65,32 @@ export const EmailSignInForm: React.FC = () => {
         try {
             const response = await signInWithEmail(formData)
 
-            // Store user data
+            // Check if 2FA is required
+            if (response.requires_2fa) {
+                // Store temporary data for 2FA verification
+                sessionStorage.setItem('2fa_temp_token', response.temp_token || '')
+                sessionStorage.setItem('2fa_user', JSON.stringify(response.user))
+
+                // Navigate to 2FA verification page
+                navigate('/auth/2fa-verify')
+                return
+            }
+
+            // Store user data - FIX: Use the correct token field from response
+            const token = response.access_token || response.jwt // Handle both field names
+
+            if (!token) {
+                throw new Error('No authentication token received')
+            }
+
             setStoredUser(response.user)
-            setStoredToken(response.access_token)
+            setStoredToken(token)
             if (response.refresh_token) {
                 setRefreshToken(response.refresh_token)
             }
 
-            // Update auth store
-            login({ user: response.user, token: response.access_token })
+            // Update auth store - CRITICAL FIX: Pass the token!
+            login({ user: response.user, token: token })
 
             // Handle remember me
             if (!rememberMe) {
@@ -87,7 +104,7 @@ export const EmailSignInForm: React.FC = () => {
             // Navigate based on user status
             if (!response.user.is_verified) {
                 navigate('/verify-email')
-            } else if (response.user.is_in_trial && !response.user.has_used_free_preview) {
+            } else if (response.user.isInTrial && !response.user.has_used_free_preview) {
                 navigate('/onboarding')
             } else {
                 navigate('/')
