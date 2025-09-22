@@ -2,6 +2,7 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios'
 import { getStoredToken, removeStoredToken, setStoredToken, getRefreshToken, setRefreshToken } from '@/utils/storage'
 import { csrfManager } from './csrf'
+import { cookieAuthManager } from './cookieAuth';
 
 const API_URL = '';  // Use Vite proxy for same-origin requests in dev
 
@@ -34,18 +35,27 @@ const onTokenRefreshed = (token: string) => {
 
 // Request interceptor for auth token and CSRF
 apiClient.interceptors.request.use(
-    async (config: InternalAxiosRequestConfig) => {
+    async (config) => {
+        // Always send credentials for cookie support
+        config.withCredentials = true;
+
+        // Add request ID
         const requestId = generateRequestId()
         config.headers['X-Request-ID'] = requestId
 
         console.log(`[API Request ${requestId}] ${config.method?.toUpperCase()} ${config.url}`)
         console.log(`[API Request ${requestId}] Cookies:`, document.cookie)
 
-        // Add JWT token if available
-        const token = getStoredToken()
-        if (token && config.headers) {
-            config.headers.Authorization = `Bearer ${token}`
-            console.log(`[API Request ${requestId}] Added JWT token`)
+        // Add JWT token from localStorage only if no cookie auth
+        // This maintains backward compatibility while preferring cookies
+        if (cookieAuthManager.shouldSendAuthHeader()) {
+            const token = getStoredToken()
+            if (token && config.headers) {
+                config.headers.Authorization = `Bearer ${token}`
+                console.log(`[API Request ${requestId}] Added JWT token from localStorage`)
+            }
+        } else {
+            console.log(`[API Request ${requestId}] Using cookie-based auth`)
         }
 
         // Add CSRF token for state-changing requests
@@ -67,7 +77,8 @@ apiClient.interceptors.request.use(
             ...config.headers,
             'X-CSRF-Token': config.headers['X-CSRF-Token'] ?
                 (config.headers['X-CSRF-Token'] as string).substring(0, 10) + '...' :
-                undefined
+                undefined,
+            'Authorization': config.headers.Authorization ? 'Bearer ...' : undefined
         })
 
         if (config.data) {
