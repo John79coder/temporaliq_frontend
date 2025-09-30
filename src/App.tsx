@@ -29,6 +29,22 @@ import { SecuritySettings } from '@/pages/settings/SecuritySettings'
 import { TwoFactorSetup } from '@/components/auth/TwoFactorSetup'
 import { TwoFactorVerify } from '@/components/auth/TwoFactorVerify'
 
+//
+import NotionOAuthCallback from '@/pages/NotionOAuthCallback'
+
+//
+import NotionDatabasePicker from '@/pages/NotionDatabasePicker'
+import NotionMappingPreview from '@/pages/NotionMappingPreview'
+import NotionTaskCandidates from '@/pages/NotionTaskCandidates'
+
+//
+import NotionPagePicker from '@/pages/NotionPagePicker'
+import NotionPageCandidates from '@/pages/NotionPageCandidates'
+
+//
+import SchedulePreview from '@/pages/SchedulePreview'
+
+
 // Wait until the auth store (Zustand + persist) finishes hydrating
 function useAuthHydrated() {
     // NOTE: this relies on Zustand persists runtime API
@@ -151,6 +167,13 @@ function App() {
             <BrowserRouter>
                 <Routes>
                     {/* Auth routes with AuthLayout */}
+                    <Route path="/schedule/preview" element={<SchedulePreview />} />
+                    <Route path="/notion/databases" element={<NotionDatabasePicker />} />
+                    <Route path="/notion/mapping" element={<NotionMappingPreview />} />
+                    <Route path="/notion/candidates" element={<NotionTaskCandidates />} />
+                    <Route path="/notion/pages" element={<NotionPagePicker />} />
+                    <Route path="/notion/page-candidates" element={<NotionPageCandidates />} />
+
                     <Route element={<AuthLayout />}>
                         <Route path="/signin" element={<SignIn />} />
                         <Route path="/signup" element={<SignUp />} />
@@ -215,6 +238,9 @@ function App() {
                             }
                         />
                     </Route>
+
+                    <Route path="/notion/callback" element={<NotionOAuthCallback />} />
+
                 </Routes>
             </BrowserRouter>
             <Toaster

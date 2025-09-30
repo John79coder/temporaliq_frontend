@@ -1,6 +1,4 @@
-// ============================================
-// src/utils/constants.ts - UPDATED ENDPOINTS
-// ============================================
+
 export const APP_NAME = 'SmartScheduler'
 export const APP_TAGLINE = 'AI-Powered Task Scheduling for Your Calendar'
 
@@ -28,10 +26,16 @@ export const API_ENDPOINTS = {
         CURRENT_USER: '/auth/me',
     },
     NOTION: {
-        CONNECT: '/notion/auth/connect',
-        CALLBACK: '/notion/auth/callback',
+        // Backend-authored routes (evidence: app/notion/routes/api.py)
+        CONNECT: '/notion/connect',
         DATABASES: '/notion/databases',
-        SYNC: '/notion/sync',
+        PREVIEW_MAPPING: '/notion/preview-mapping',
+        MAP_SCHEMA: '/notion/map-schema',
+        GENERATE_CANDIDATES: '/notion/generate-candidates',
+        PAGES_GENERATE_CANDIDATES: '/notion/pages/generate-candidates',
+        REFRESH_TOKEN: '/notion/refresh-token',
+        // Note: The OAuth "callback" is handled by a FRONTEND route (see NotionOAuthCallback.tsx below),
+        // not a backend endpoint.
     },
     CALENDAR: {
         CONNECT: '/icloud/connect',

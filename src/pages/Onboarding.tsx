@@ -1,9 +1,12 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/common/Button'
+import NotionConnectButton from '@/components/integrations/NotionConnectButton'
+import { useOnboardingStore } from '@/stores/onboardingStore'
 
 const Onboarding: React.FC = () => {
     const navigate = useNavigate()
+    const notionConnected = useOnboardingStore((s) => s.notionConnected)
 
     return (
         <div className="max-w-2xl mx-auto">
@@ -21,10 +24,33 @@ const Onboarding: React.FC = () => {
                             </div>
                             <div>
                                 <h3 className="font-medium text-gray-900">Connect Notion</h3>
-                                <p className="text-sm text-gray-600">Import tasks from your databases</p>
+                                <p className="text-sm text-gray-600">Import tasks from your databases or pages</p>
+                                {notionConnected && (
+                                    <div className="mt-1 text-xs font-medium text-emerald-600">Connected</div>
+                                )}
                             </div>
                         </div>
-                        <Button size="sm" variant="secondary">Connect</Button>
+
+                        {!notionConnected ? (
+                            <NotionConnectButton />
+                        ) : (
+                            <div className="flex items-center gap-2">
+                                <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    onClick={() => navigate('/notion/databases')}
+                                >
+                                    Use Notion Database
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    onClick={() => navigate('/notion/pages')}
+                                >
+                                    Use Notion Page
+                                </Button>
+                            </div>
+                        )}
                     </div>
 
                     <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
