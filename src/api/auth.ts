@@ -250,7 +250,7 @@ export const resetPassword = async (token: string, newPassword: string): Promise
     }
 }
 
-export const refreshToken = async (refreshToken: string): Promise<{ access_token: string }> => {
+export const refreshToken = async ( refreshToken: string): Promise<AuthResponse> => {
     logAuthAction('Refreshing token')
 
     try {
