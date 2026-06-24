@@ -379,7 +379,7 @@ Store these codes in a secure location. You will need them if you lose access to
                         <div className="space-y-6">
                             <div className="text-center">
                                 <h2 className="text-xl font-semibold mb-4">Save Your Backup Codes</h2>
-                                <Alert type="warning" className="text-left mb-6">
+                                <Alert variant="warning" className="text-left mb-6">
                                     <AlertTriangle className="w-4 h-4" />
                                     <span>
                                         Save these codes in a secure place. You'll need them to access your account if you lose your authenticator device.
