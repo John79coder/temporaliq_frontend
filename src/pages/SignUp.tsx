@@ -3,18 +3,15 @@
 // ============================================
 import React, { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useAuthStore } from '@/stores/authStore'
 import { signUpWithEmail } from '@/api/auth'
 import { Input } from '@/components/common/Input'
 import { Button } from '@/components/common/Button'
 import { validateEmail, getPasswordStrength } from '@/utils/validators'
-import { setStoredUser, setStoredToken } from '@/utils/storage'
 import { APP_NAME } from '@/utils/constants'
 import toast from 'react-hot-toast'
 
 const SignUp: React.FC = () => {
     const navigate = useNavigate()
-    const { login } = useAuthStore()
 
     const [formData, setFormData] = useState({
         email: '',
@@ -91,26 +88,15 @@ const SignUp: React.FC = () => {
         setIsLoading(true)
 
         try {
-            const response = await signUpWithEmail({
+            await signUpWithEmail({
                 email: formData.email,
                 password: formData.password,
             })
 
-            // Store user and token
-            setStoredUser(response.user)
-            setStoredToken(response.access_token)
-            if (response.refresh_token) {
-                localStorage.setItem('refresh_token', response.refresh_token)
-            }
-
-            // Update auth store
-            login(response.user, response.access_token)
-
-            // Show success message
             toast.success('Account created! Please check your email to verify.')
 
-            // Navigate to verification notice or dashboard
             navigate('/verify-email')
+
         } catch (error: any) {
             console.error('Sign up error:', error)
 

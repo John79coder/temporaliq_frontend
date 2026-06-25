@@ -10,6 +10,10 @@ interface ResetPasswordResponse {
     jwt?: string
 }
 
+export interface SignUpResponse {
+    message: string
+}
+
 // === NEW INTERFACES FOR APPLE SIGN-IN AND 2FA ===
 export interface AppleSignInData {
     id_token?: string
@@ -61,8 +65,8 @@ const logAuthAction = (action: string, data?: any) => {
     })
 }
 
-// === EXISTING FUNCTIONS (UNCHANGED) ===
-export const signUpWithEmail = async (credentials: SignUpCredentials): Promise<AuthResponse> => {
+export const signUpWithEmail = async (credentials: SignUpCredentials): Promise<SignUpResponse> => {
+
     logAuthAction('Starting signUpWithEmail', { email: credentials.email })
 
     try {
@@ -74,13 +78,12 @@ export const signUpWithEmail = async (credentials: SignUpCredentials): Promise<A
             }
         )
 
-        logAuthAction('Signup successful', { userId: data.user?.id })
+        logAuthAction('Signup successful', { message: data.message })
 
         return {
-            user: data.user,
-            access_token: data.jwt,
-            refresh_token: data.refresh_token
+            message: data.message
         }
+
     } catch (error: any) {
         logAuthAction('Signup failed', {
             error: error.message,
