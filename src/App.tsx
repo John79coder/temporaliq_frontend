@@ -134,11 +134,11 @@ function App() {
         setAppReady(true);
 
         // === New Debug Logging System ===
-        console.log('🚀 Initializing debug logging');
-        debugLogger.testCookiePersistence();
+        //console.log('🚀 Initializing debug logging');
+        //debugLogger.testCookiePersistence();
 
         (window as any).debugCommands = {
-            testCookies: () => debugLogger.testCookiePersistence(),
+            //testCookies: () => debugLogger.testCookiePersistence(),
             showLogs: () => console.table(debugLogger.exportLogs().logs),
             clearLogs: () => debugLogger.clearLogs(),
             getCookies: () => document.cookie,
