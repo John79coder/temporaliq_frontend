@@ -9,7 +9,6 @@ import { useAuthStore } from '@/stores/authStore'
 
 interface SetupData {
     qr_code: string
-    secret: string
     manual_entry_key: string
     issuer: string
 }
@@ -93,8 +92,7 @@ export function useTwoFactorSetup() {
         setIsLoading(true)
         try {
             const response = await verify2FASetup({
-                code: verificationCode,
-                secret: setupData?.secret
+                code: verificationCode
             })
 
             if (response.backup_codes) {

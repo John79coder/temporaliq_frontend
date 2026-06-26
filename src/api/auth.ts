@@ -29,7 +29,6 @@ export interface AppleSignInData {
 
 export interface TwoFactorSetupData {
     code: string
-    secret?: string
 }
 
 export interface TwoFactorVerifyData {
@@ -39,7 +38,6 @@ export interface TwoFactorVerifyData {
 
 export interface TwoFactorSetupResponse {
     qr_code: string
-    secret: string
     manual_entry_key: string
     issuer: string
 }
@@ -380,7 +378,7 @@ export const verify2FASetup = async (data: TwoFactorSetupData): Promise<TwoFacto
     logAuthAction('Verifying 2FA setup')
 
     try {
-        const response = await apiClient.post('/auth/2fa/setup', data)
+        const response = await apiClient.post('/auth/2fa/setup/verify', data)
         logAuthAction('2FA enabled successfully')
         return response.data
     } catch (error: any) {
@@ -428,7 +426,7 @@ export const disable2FA = async (): Promise<{ message: string }> => {
     logAuthAction('Disabling 2FA')
 
     try {
-        const response = await apiClient.post('/auth/2fa/disable')
+        const response = await apiClient.delete('/auth/2fa')
         logAuthAction('2FA disabled successfully')
         return response.data
     } catch (error: any) {
@@ -445,9 +443,15 @@ export const getBackupCodesInfo = async (): Promise<{ codes_remaining: number; t
     logAuthAction('Fetching backup codes info')
 
     try {
-        const response = await apiClient.get('/auth/2fa/backup-codes')
+        const response = await apiClient.get('/auth/2fa/status')
+
         logAuthAction('Backup codes info received', response.data)
-        return response.data
+
+        return {
+            two_factor_enabled: response.data.enabled,
+            codes_remaining: response.data.codes_remaining
+        }
+
     } catch (error: any) {
         logAuthAction('Failed to fetch backup codes info', {
             error: error.message,
