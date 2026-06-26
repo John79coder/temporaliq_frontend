@@ -33,7 +33,8 @@ export interface TwoFactorSetupData {
 
 export interface TwoFactorVerifyData {
     code: string
-    temp_token: string
+    user_id?: string | number
+    temp_token?: string
 }
 
 export interface TwoFactorSetupResponse {
@@ -95,7 +96,6 @@ export const signUpWithEmail = async (credentials: SignUpCredentials): Promise<S
     }
 }
 
-// === MODIFIED FOR 2FA SUPPORT ===
 export const signInWithEmail = async (credentials: SignInCredentials): Promise<AuthResponseWith2FA> => {
     logAuthAction('Starting signInWithEmail', { email: credentials.email })
 
@@ -109,25 +109,33 @@ export const signInWithEmail = async (credentials: SignInCredentials): Promise<A
         )
 
         logAuthAction('Signin response', {
-            userId: data.user?.id,
-            requires2FA: data.requires_2fa
+            hasJwt: !!data.jwt,
+            requires2FA: data.requires_2fa,
+            userId: data.user?.id || data.user_id,
+            fullResponse: data   // For debugging
         })
 
-        // Check if 2FA is required
-        if (data.requires_2fa) {
+        // 2FA IS REQUIRED
+        if (data.requires_two_factor === true) {
+            logAuthAction('2FA required - navigating to verification')
             return {
-                user: data.user,
-                access_token: '',  // No full token yet
+                user: data.user || { id: data.user_id, email: credentials.email, is_verified: true },
+                access_token: '',
                 refresh_token: '',
                 requires_2fa: true,
-                temp_token: data.temp_token
+                temp_token: String(data.user_id || data.user?.id)
             }
+        }
+
+        // NORMAL LOGIN
+        if (!data.jwt) {
+            throw new Error('No authentication token received')
         }
 
         return {
             user: data.user,
             access_token: data.jwt,
-            refresh_token: data.refresh_token
+            refresh_token: data.refresh_token || ''
         }
     } catch (error: any) {
         logAuthAction('Signin failed', {
@@ -142,7 +150,7 @@ export const signInWithEmail = async (credentials: SignInCredentials): Promise<A
         if (error.response?.status === 403) {
             throw new Error('Account not verified. Please check your email.')
         }
-        throw new Error('Failed to sign in. Please try again.')
+        throw new Error(error.response?.data?.message || 'Failed to sign in. Please try again.')
     }
 }
 

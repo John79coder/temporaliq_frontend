@@ -2,6 +2,7 @@
 // src/types/auth.ts - UPDATED TYPES
 // ============================================
 export interface User {
+    isInTrial: boolean;
     id: string | number
     email: string
     name?: string
@@ -19,7 +20,8 @@ export interface User {
 
 export interface AuthResponse {
     user: User
-    access_token: string
+    access_token?: string
+    jwt?: string
     refresh_token?: string
 }
 

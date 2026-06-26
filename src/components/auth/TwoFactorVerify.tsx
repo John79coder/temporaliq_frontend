@@ -12,7 +12,6 @@ import toast from 'react-hot-toast'
 
 export const TwoFactorVerify: React.FC = () => {
     const navigate = useNavigate()
-    const { login } = useAuthStore()
     const [code, setCode] = useState('')
     const [isLoading, setIsLoading] = useState(false)
     const [useBackupCode, setUseBackupCode] = useState(false)
@@ -52,7 +51,7 @@ export const TwoFactorVerify: React.FC = () => {
         try {
             const response = await verify2FA({
                 code: codeToVerify,
-                temp_token: tempToken!
+                user_id: tempToken!
             })
 
             // Clear session storage
@@ -61,7 +60,7 @@ export const TwoFactorVerify: React.FC = () => {
 
             // CRITICAL FIX: Use access_token from response, not jwt
             // The verify2FA function returns { user, access_token, refresh_token }
-            const token = response.access_token
+            const token = response.access_token || response.jwt
 
             if (!token) {
                 console.error('No token received from 2FA verification')
@@ -72,8 +71,11 @@ export const TwoFactorVerify: React.FC = () => {
             setStoredUser(response.user)
             setStoredToken(token)
 
-            // Update auth store with both user AND token
-            login({ user: response.user, token: token })
+            // Update auth store
+            useAuthStore.getState().login({
+                user: response.user as any,
+                token: token
+            })
 
             toast.success('Successfully authenticated!')
 

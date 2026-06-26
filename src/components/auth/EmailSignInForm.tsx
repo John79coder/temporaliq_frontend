@@ -66,12 +66,16 @@ export const EmailSignInForm: React.FC = () => {
             const response = await signInWithEmail(formData)
 
             // Check if 2FA is required
-            if (response.requires_2fa) {
-                // Store temporary data for 2FA verification
-                sessionStorage.setItem('2fa_temp_token', response.temp_token || '')
-                sessionStorage.setItem('2fa_user', JSON.stringify(response.user))
+            // Inside handleSubmit, replace the 2FA section:
 
-                // Navigate to 2FA verification page
+            if (response.requires_2fa) {
+                sessionStorage.setItem('2fa_temp_token', response.temp_token || '')
+                sessionStorage.setItem('2fa_user', JSON.stringify(response.user || { email: formData.email }))
+
+                toast('Two-factor code required', {
+                    icon: '🔐',
+                    duration: 4000,
+                })
                 navigate('/auth/2fa-verify')
                 return
             }
@@ -89,8 +93,7 @@ export const EmailSignInForm: React.FC = () => {
                 setRefreshToken(response.refresh_token)
             }
 
-            // Update auth store - CRITICAL FIX: Pass the token!
-            login({ user: response.user, token: token })
+            login({ user: response.user as any, token: token })
 
             // Handle remember me
             if (!rememberMe) {
