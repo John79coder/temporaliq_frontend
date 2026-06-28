@@ -58,10 +58,26 @@ apiClient.interceptors.request.use(
             console.log(`[API Request ${requestId}] Using cookie-based auth`)
         }
 
-        // Add CSRF token for state-changing requests
-        const method = config.method?.toLowerCase()
-        if (method && ['post', 'put', 'patch', 'delete'].includes(method)) {
-            console.log(`[API Request ${requestId}] State-changing request, fetching CSRF token`)
+        // Add CSRF token to endpoints that require it
+        const csrfProtectedEndpoints = [
+            '/auth/signup',
+            '/auth/login',
+            '/auth/logout',
+            '/auth/verify',
+            '/auth/apple-signin',
+            '/auth/reset-password',
+            '/auth/reset-password/confirm',
+            '/auth/2fa/setup',
+            '/auth/2fa/setup/verify',
+            '/auth/2fa',
+            '/auth/2fa/verify',
+            '/auth/2fa/backup-codes',
+        ]
+
+        const needsCsrf = csrfProtectedEndpoints.includes(config.url ?? '')
+
+        if (needsCsrf) {
+            console.log(`[API Request ${requestId}] CSRF-protected endpoint, fetching CSRF token`)
 
             try {
                 const csrfToken = await csrfManager.getToken()
@@ -69,7 +85,7 @@ apiClient.interceptors.request.use(
                 console.log(`[API Request ${requestId}] Added CSRF token:`, csrfToken.substring(0, 10) + '...')
             } catch (error) {
                 console.error(`[API Request ${requestId}] Failed to get CSRF token:`, error)
-                // Let request proceed - server will reject if CSRF required
+                throw error
             }
         }
 
