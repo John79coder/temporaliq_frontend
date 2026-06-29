@@ -1,7 +1,6 @@
 import * as React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
-import { useOnboardingStore } from '@/stores/onboardingStore'
 
 const NOTION_AUTH_URL = import.meta.env.VITE_NOTION_AUTH_URL as string
 const NOTION_CLIENT_ID = import.meta.env.VITE_NOTION_CLIENT_ID as string

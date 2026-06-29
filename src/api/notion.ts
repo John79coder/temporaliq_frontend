@@ -7,8 +7,8 @@ import { apiClient } from './client'
 import { API_ENDPOINTS } from '@/utils/constants'
 
 // Use an absolute backend URL like "http://localhost:8000"
-const API_BASE = (import.meta as any).env?.VITE_API_URL as string | undefined
-const withBase = () => (API_BASE ? { baseURL: API_BASE } : {})
+/*const API_BASE = (import.meta as any).env?.VITE_API_URL as string | undefined
+const withBase = () => (API_BASE ? { baseURL: API_BASE } : {})*/
 
 // ----- Types that mirror backend contracts (kept minimal to avoid over-assuming) -----
 
@@ -57,12 +57,12 @@ export type TaskCandidate = {
 // ----- API functions -----
 
 export async function connectNotion(payload: NotionConnectPayload): Promise<NotionConnectResponse> {
-    const { data } = await apiClient.post(API_ENDPOINTS.NOTION.CONNECT, payload, withBase())
+    const { data } = await apiClient.post(API_ENDPOINTS.NOTION.CONNECT, payload)
     return data
 }
 
 export async function listNotionDatabases(): Promise<NotionDatabase[]> {
-    const { data } = await apiClient.get(API_ENDPOINTS.NOTION.DATABASES, withBase())
+    const { data } = await apiClient.get(API_ENDPOINTS.NOTION.DATABASES)
     return Array.isArray(data) ? data : []
 }
 
@@ -70,13 +70,12 @@ export async function previewMapping(database_id: string): Promise<unknown> {
     const { data } = await apiClient.post(
         API_ENDPOINTS.NOTION.PREVIEW_MAPPING,
         { database_id },
-        withBase()
     )
     return data
 }
 
 export async function mapSchema(body: FieldMappingIn): Promise<FieldMappingOut> {
-    const { data } = await apiClient.post(API_ENDPOINTS.NOTION.MAP_SCHEMA, body, withBase())
+    const { data } = await apiClient.post(API_ENDPOINTS.NOTION.MAP_SCHEMA, body)
     return data
 }
 
@@ -84,7 +83,6 @@ export async function generateCandidates(database_id: string): Promise<TaskCandi
     const { data } = await apiClient.post(
         API_ENDPOINTS.NOTION.GENERATE_CANDIDATES,
         { database_id },
-        withBase()
     )
     return Array.isArray(data) ? data : []
 }
@@ -96,12 +94,11 @@ export async function generateCandidatesFromPage(
     const { data } = await apiClient.post(
         API_ENDPOINTS.NOTION.PAGES_GENERATE_CANDIDATES,
         { page_id, ...(force_single_task !== undefined ? { force_single_task } : {}) },
-        withBase()
     )
     return Array.isArray(data) ? data : []
 }
 
 export async function refreshNotionToken(): Promise<unknown> {
-    const { data } = await apiClient.post(API_ENDPOINTS.NOTION.REFRESH_TOKEN, {}, withBase())
+    const { data } = await apiClient.post(API_ENDPOINTS.NOTION.REFRESH_TOKEN, {})
     return data
 }
