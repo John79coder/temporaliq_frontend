@@ -16,111 +16,143 @@ const STATE_KEY = 'notion_oauth_state'
 const REDIRECT_KEY = 'notion_oauth_redirect_uri'
 
 const NotionOAuthCallback: React.FC = () => {
-    const navigate = useNavigate()
-    const [params] = useSearchParams()
-    const setNotionConnected = useOnboardingStore((s) => s.setNotionConnected)
-    const user = useAuthStore((s) => s.user)
+  const navigate = useNavigate()
+  const [params] = useSearchParams()
+  const setNotionConnected = useOnboardingStore((s) => s.setNotionConnected)
+  const user = useAuthStore((s) => s.user)
 
-    const [status, setStatus] = useState<'idle' | 'working' | 'error' | 'success'>('idle')
-    const [message, setMessage] = useState<string>('')
+  const [status, setStatus] = useState<'idle' | 'working' | 'error' | 'success'>('idle')
+  const [message, setMessage] = useState<string>('')
 
-    useEffect(() => {
-        const code = params.get('code')
-        const state = params.get('state')
+  useEffect(() => {
+    const code = params.get('code')
+    const returnedState = params.get('state')
+    const error = params.get('error')
 
-        const storedRedirect = sessionStorage.getItem(REDIRECT_KEY)
-        const envRedirect = (import.meta as any).env?.VITE_NOTION_REDIRECT_URI as string | undefined
-        const redirectUri = storedRedirect || envRedirect
+    // Get redirect URI (from sessionStorage or env)
+    const storedRedirect = sessionStorage.getItem(REDIRECT_KEY)
+    const envRedirect = (import.meta as any).env?.VITE_NOTION_REDIRECT_URI as string | undefined
+    const redirectUri = storedRedirect || envRedirect
 
-        // Basic param checks
-        if (!code || !state) {
-            setStatus('error')
-            setMessage('Missing OAuth parameters from Notion.')
-            return
+    if (error) {
+      setStatus('error')
+      setMessage(`Notion error: ${error}`)
+      return
+    }
+
+    if (!code) {
+      setStatus('error')
+      setMessage('Missing authorization code from Notion.')
+      return
+    }
+
+    if (!redirectUri) {
+      setStatus('error')
+      setMessage('Missing Notion redirect URI configuration.')
+      return
+    }
+
+    const expectedState = sessionStorage.getItem(STATE_KEY)
+    if (!expectedState || returnedState !== expectedState) {
+      setStatus('error')
+      setMessage('Invalid OAuth state. Please try connecting Notion again.')
+
+      sessionStorage.removeItem(STATE_KEY)
+      sessionStorage.removeItem(REDIRECT_KEY)
+      return
+    }
+
+    const run = async () => {
+      setStatus('working')
+      setMessage('Finalizing your Notion connection…')
+
+      if (!user?.id) {
+        try {
+          sessionStorage.setItem(
+            PENDING_KEY,
+            JSON.stringify({
+              code,
+              redirect_uri: redirectUri,
+              ts: Date.now(),
+            })
+          )
+        } catch (_) {}
+
+        toast('Please sign in to finish connecting Notion.', { icon: '🔒' })
+        navigate('/signin', { replace: true })
+        return
+      }
+
+      try {
+        await connectNotion({
+          user_id: user.id,
+          code,
+          redirect_uri: redirectUri,
+        } as any)
+
+        setNotionConnected(true)
+        setStatus('success')
+        setMessage('Notion connected successfully!')
+
+        // Cleanup
+        sessionStorage.removeItem(PENDING_KEY)
+        sessionStorage.removeItem(STATE_KEY)
+        sessionStorage.removeItem(REDIRECT_KEY)
+
+        // Small delay so user sees success message
+        setTimeout(() => {
+          navigate('/onboarding', { replace: true })
+        }, 1200)
+      } catch (err: any) {
+        console.error('Notion connect error:', err)
+        const httpStatus = err?.response?.status
+        const apiMsg = err?.response?.data?.detail || err?.message || 'Failed to connect Notion.'
+
+        if (httpStatus === 401) {
+          try {
+            sessionStorage.setItem(
+              PENDING_KEY,
+              JSON.stringify({
+                code,
+                redirect_uri: redirectUri,
+                ts: Date.now(),
+              })
+            )
+          } catch (_) {}
+          toast('Session expired. Please sign in again.', { icon: '🔒' })
+          navigate('/signin', { replace: true })
+          return
         }
-        if (!redirectUri) {
-            setStatus('error')
-            setMessage('Missing Notion redirect URI configuration.')
-            return
-        }
 
-        // ✅ Restore state validation (anti-CSRF)
-        const expectedState = sessionStorage.getItem(STATE_KEY)
-        if (!expectedState || state !== expectedState) {
-            setStatus('error')
-            setMessage('Invalid OAuth state. Please start the Notion connect flow again.')
-            // Cleanup the stale state so a fresh attempt works cleanly
-            sessionStorage.removeItem(STATE_KEY)
-            sessionStorage.removeItem(REDIRECT_KEY)
-            return
-        }
+        setStatus('error')
+        setMessage(typeof apiMsg === 'string' ? apiMsg : 'Failed to connect Notion.')
+      }
+    }
 
-        const run = async () => {
-            setStatus('working')
-            setMessage('Finalizing your Notion connection…')
+    run()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params, user, navigate, setNotionConnected])
 
-            // If user context isn’t available, persist payload and require sign-in
-            if (!user?.id) {
-                try {
-                    sessionStorage.setItem(PENDING_KEY, JSON.stringify({ code, redirect_uri: redirectUri, ts: Date.now() }))
-                } catch { /* best effort */ }
-                toast('Please sign in to finish connecting Notion.', { icon: '🔒' })
-                navigate('/signin', { replace: true })
-                return
-            }
+  return (
+    <div className="mx-auto max-w-lg py-16">
+      <div className="rounded-xl border border-gray-200 bg-white p-8 shadow-sm">
+        <h1 className="mb-2 text-2xl font-bold">Notion Connection</h1>
 
-            try {
-                await connectNotion({ user_id: user.id, code, redirect_uri: redirectUri } as any)
-                setNotionConnected(true)
-                setStatus('success')
-                setMessage('Notion connected successfully.')
-                // Cleanup ephemeral items after success
-                sessionStorage.removeItem(PENDING_KEY)
-                sessionStorage.removeItem(STATE_KEY)
-                sessionStorage.removeItem(REDIRECT_KEY)
-                navigate('/onboarding', { replace: true })
-            } catch (err: any) {
-                const http = err?.response?.status
-                if (http === 401) {
-                    // Persist the payload and prompt re-auth; onboarding will auto-resume
-                    try {
-                        sessionStorage.setItem(PENDING_KEY, JSON.stringify({ code, redirect_uri: redirectUri, ts: Date.now() }))
-                    } catch { /* best effort */ }
-                    toast('Session expired. Please sign in to finish connecting Notion.', { icon: '🔒' })
-                    navigate('/signin', { replace: true })
-                    return
-                }
+        {status === 'working' && <p className="text-gray-600">Finalizing… Please wait.</p>}
+        {(status === 'error' || status === 'success') && (
+          <p className={status === 'error' ? 'text-red-600' : 'text-green-700'}>{message}</p>
+        )}
 
-                setStatus('error')
-                const apiMsg = err?.response?.data?.detail || err?.message || 'Failed to connect Notion.'
-                setMessage(typeof apiMsg === 'string' ? apiMsg : 'Failed to connect Notion.')
-            }
-        }
-
-        run()
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [])
-
-    return (
-        <div className="max-w-lg mx-auto py-16">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
-                <h1 className="text-2xl font-bold mb-2">Notion Connection</h1>
-
-                {status === 'working' && <p className="text-gray-600">Finalizing… Please wait.</p>}
-                {(status === 'error' || status === 'success') && (
-                    <p className={status === 'error' ? 'text-red-600' : 'text-green-700'}>{message}</p>
-                )}
-
-                {(status === 'error' || status === 'success') && (
-                    <div className="mt-6">
-                        <Link to="/onboarding">
-                            <Button>Back to Onboarding</Button>
-                        </Link>
-                    </div>
-                )}
-            </div>
-        </div>
-    )
+        {(status === 'error' || status === 'success') && (
+          <div className="mt-6">
+            <Link to="/onboarding">
+              <Button>Back to Onboarding</Button>
+            </Link>
+          </div>
+        )}
+      </div>
+    </div>
+  )
 }
 
 export default NotionOAuthCallback

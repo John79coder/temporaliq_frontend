@@ -13,92 +13,96 @@ const withBase = () => (API_BASE ? { baseURL: API_BASE } : {})*/
 // ----- Types that mirror backend contracts (kept minimal to avoid over-assuming) -----
 
 export type NotionConnectPayload = {
-    user_id: number
-    code: string
-    /** exact backend type is HttpUrl; send as string */
-    redirect_uri: string
+  user_id: number
+  code: string
+  /** exact backend type is HttpUrl; send as string */
+  redirect_uri: string
 }
 
 export type NotionConnectResponse = {
-    // Backend returns NotionTokenOut from stored connection. We don't rely on fields here.
-    // Accept unknown shape and let UI react to 200 vs error.
-    [k: string]: unknown
+  // Backend returns NotionTokenOut from stored connection. We don't rely on fields here.
+  // Accept unknown shape and let UI react to 200 vs error.
+  [k: string]: unknown
 }
 
 export type NotionDatabase = {
-    // Backend DatabaseOut shape isn’t fully specified in the docs we have.
-    // We only rely on id and name if present, but keep the rest open.
-    id?: string
-    name?: string
-    [k: string]: unknown
+  // Backend DatabaseOut shape isn’t fully specified in the docs we have.
+  // We only rely on id and name if present, but keep the rest open.
+  id?: string
+  name?: string
+  [k: string]: unknown
 }
 
 export type FieldMappingIn = {
-    user_id: number
-    notion_db_id: string
-    title_field: string
-    due_date_field: string
-    duration_field: string
+  user_id: number
+  notion_db_id: string
+  title_field: string
+  due_date_field: string
+  duration_field: string
 }
 
 export type FieldMappingOut = {
-    // Keep flexible; UI only needs acks and ids
-    notion_db_id: string
-    [k: string]: unknown
+  // Keep flexible; UI only needs acks and ids
+  notion_db_id: string
+  [k: string]: unknown
 }
 
 export type TaskCandidate = {
-    // Avoid assumptions, only surface what lists can display safely
-    title?: string
-    id?: string
-    [k: string]: unknown
+  // Avoid assumptions, only surface what lists can display safely
+  title?: string
+  id?: string
+  [k: string]: unknown
 }
 
 // ----- API functions -----
 
 export async function connectNotion(payload: NotionConnectPayload): Promise<NotionConnectResponse> {
-    const { data } = await apiClient.post(API_ENDPOINTS.NOTION.CONNECT, payload)
-    return data
+  const { data } = await apiClient.post(API_ENDPOINTS.NOTION.CONNECT, payload)
+  return data
 }
 
 export async function listNotionDatabases(): Promise<NotionDatabase[]> {
-    const { data } = await apiClient.get(API_ENDPOINTS.NOTION.DATABASES)
-    return Array.isArray(data) ? data : []
+  const { data } = await apiClient.get(API_ENDPOINTS.NOTION.DATABASES)
+  return Array.isArray(data) ? data : []
 }
 
 export async function previewMapping(database_id: string): Promise<unknown> {
-    const { data } = await apiClient.post(
-        API_ENDPOINTS.NOTION.PREVIEW_MAPPING,
-        { database_id },
-    )
-    return data
+  const { data } = await apiClient.post(API_ENDPOINTS.NOTION.PREVIEW_MAPPING, { database_id })
+  return data
 }
 
 export async function mapSchema(body: FieldMappingIn): Promise<FieldMappingOut> {
-    const { data } = await apiClient.post(API_ENDPOINTS.NOTION.MAP_SCHEMA, body)
-    return data
+  const { data } = await apiClient.post(API_ENDPOINTS.NOTION.MAP_SCHEMA, body)
+  return data
 }
 
 export async function generateCandidates(database_id: string): Promise<TaskCandidate[]> {
-    const { data } = await apiClient.post(
-        API_ENDPOINTS.NOTION.GENERATE_CANDIDATES,
-        { database_id },
-    )
-    return Array.isArray(data) ? data : []
+  const { data } = await apiClient.post(API_ENDPOINTS.NOTION.GENERATE_CANDIDATES, { database_id })
+  return Array.isArray(data) ? data : []
 }
 
 export async function generateCandidatesFromPage(
-    page_id: string,
-    force_single_task?: boolean
+  page_id: string,
+  force_single_task?: boolean
 ): Promise<TaskCandidate[]> {
-    const { data } = await apiClient.post(
-        API_ENDPOINTS.NOTION.PAGES_GENERATE_CANDIDATES,
-        { page_id, ...(force_single_task !== undefined ? { force_single_task } : {}) },
-    )
-    return Array.isArray(data) ? data : []
+  const { data } = await apiClient.post(API_ENDPOINTS.NOTION.PAGES_GENERATE_CANDIDATES, {
+    page_id,
+    ...(force_single_task !== undefined ? { force_single_task } : {}),
+  })
+  return Array.isArray(data) ? data : []
 }
 
 export async function refreshNotionToken(): Promise<unknown> {
-    const { data } = await apiClient.post(API_ENDPOINTS.NOTION.REFRESH_TOKEN, {})
-    return data
+  const { data } = await apiClient.post(API_ENDPOINTS.NOTION.REFRESH_TOKEN, {})
+  return data
+}
+
+export async function startNotionOAuth(): Promise<{ authorize_url: string }> {
+  const { data } = await apiClient.get(API_ENDPOINTS.NOTION.OAUTH_START)
+  return data
+}
+
+export async function getNotionConnection() {
+  const { data } = await apiClient.get(API_ENDPOINTS.NOTION.CONNECTION)
+  return data
 }
