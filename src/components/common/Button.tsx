@@ -7,14 +7,18 @@ import { Loader2 } from 'lucide-react'
 import { cn } from '@/utils/cn'
 
 const buttonVariants = cva(
-    'inline-flex items-center justify-center rounded-lg font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-apple-blue focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50',
+    'inline-flex items-center justify-center rounded-lg font-medium transition-apple focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-apple-blue focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50',
     {
         variants: {
             variant: {
                 primary: 'bg-apple-blue text-white hover:bg-apple-blue-hover',
-                secondary: 'bg-gray-100 text-gray-900 hover:bg-gray-200',
-                ghost: 'hover:bg-gray-100 hover:text-gray-900',
+                secondary:
+                    'border border-ui-border bg-white text-ui-text hover:bg-ui-surface',
+                ghost:
+                    'text-ui-text-secondary hover:bg-ui-surface hover:text-ui-text',
                 destructive: 'bg-red-500 text-white hover:bg-red-600',
+                subtle:
+                    'border border-ui-border bg-white text-ui-text shadow-sm hover:bg-ui-surface'
             },
             size: {
                 sm: 'h-9 px-3 text-sm',

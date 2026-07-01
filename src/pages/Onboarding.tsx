@@ -7,6 +7,7 @@ import { useOnboardingStore } from '@/stores/onboardingStore'
 import { useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { getNotionConnection } from '@/api/notion'
+import ICalendarConnectButton from "@components/integrations/iCalendarConnectButton.tsx";
 
 const Onboarding: React.FC = () => {
   const navigate = useNavigate()
@@ -44,8 +45,8 @@ const Onboarding: React.FC = () => {
 
   }, [searchParams, setSearchParams, setNotionConnected, setWorkspaceId, setConnectedAt])
 
-  const notionButtonClass =
-      "min-w-[140px] justify-center border-slate-300 bg-white shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-50"
+  const integrationButtonClass =
+      "min-w-[140px]"
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -85,8 +86,8 @@ const Onboarding: React.FC = () => {
                 <div className="ml-6 flex items-center gap-3">
                 <Button
                     size="sm"
-                    variant="secondary"
-                    className={notionButtonClass}
+                    variant="subtle"
+                    className={ integrationButtonClass }
                     onClick={() => navigate('/notion/databases')}
                 >
                   🗄 Database
@@ -94,8 +95,8 @@ const Onboarding: React.FC = () => {
 
                 <Button
                     size="sm"
-                    variant="secondary"
-                    className={notionButtonClass}
+                    variant="subtle"
+                    className={ integrationButtonClass }
                     onClick={() => navigate('/notion/pages')}
                 >
                   📄 Page
@@ -110,18 +111,16 @@ const Onboarding: React.FC = () => {
                 <span className="text-xl">📅</span>
               </div>
               <div className="flex flex-col justify-center">
-                <h3 className="font-medium text-gray-900">Connect Calendar</h3>
+                <h3 className="font-medium text-gray-900">Calendar</h3>
                 <p className="text-sm text-gray-600">Sync with iCloud or Google Calendar</p>
               </div>
             </div>
-            <Button size="sm" variant="secondary">
-              Connect
-            </Button>
+            <ICalendarConnectButton/>
           </div>
         </div>
 
         <div className="mt-8 flex justify-between">
-          <Button variant="ghost" onClick={() => navigate('/')}>
+          <Button variant="ghost" className={ integrationButtonClass } onClick={() => navigate('/')}>
             Skip for now
           </Button>
           <Button onClick={() => navigate('/')}>Continue</Button>

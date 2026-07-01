@@ -18,7 +18,7 @@ export default {
                     blue: '#0071E3',
                     'blue-hover': '#0077ED',
                 },
-                notion: {
+                ui: {
                     bg: '#FFFFFF',
                     surface: '#F7F7F5',
                     'surface-hover': '#EFEFED',
