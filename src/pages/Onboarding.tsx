@@ -19,10 +19,6 @@ const Onboarding: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams()
 
   useEffect(() => {
-    if (!searchParams.get('notion_connected')) {
-      return
-    }
-
     const loadConnection = async () => {
       try {
         const connection = await getNotionConnection()
@@ -33,16 +29,23 @@ const Onboarding: React.FC = () => {
           setConnectedAt(connection.connected_at)
         }
 
-        const params = new URLSearchParams(searchParams)
-        params.delete('notion_connected')
-        setSearchParams(params, { replace: true })
+        // Remove the query parameter if it's present.
+        if (searchParams.has('notion_connected')) {
+          const params = new URLSearchParams(searchParams)
+          params.delete('notion_connected')
+          setSearchParams(params, { replace: true })
+        }
       } catch (e) {
         console.error('Failed to retrieve Notion connection', e)
       }
     }
 
     loadConnection()
+
   }, [searchParams, setSearchParams, setNotionConnected, setWorkspaceId, setConnectedAt])
+
+  const notionButtonClass =
+      "min-w-[140px] justify-center border-slate-300 bg-white shadow-sm transition-colors hover:border-slate-400 hover:bg-slate-50"
 
   return (
     <div className="mx-auto max-w-2xl">
@@ -54,15 +57,24 @@ const Onboarding: React.FC = () => {
 
         <div className="space-y-6">
           <div className="flex items-center justify-between rounded-lg border border-gray-200 p-4">
-            <div className="flex items-center space-x-4">
+            <div className="flex flex-1 items-center space-x-4">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-100">
                 <span className="text-xl">📝</span>
               </div>
-              <div>
-                <h3 className="font-medium text-gray-900">Connect Notion</h3>
-                <p className="text-sm text-gray-600">Import tasks from your databases or pages</p>
+              <div className="flex flex-col justify-center">
+                <h3 className="font-medium text-gray-900">
+                  {notionConnected ? 'Notion' : 'Connect Notion'}
+                </h3>
+                <p className="text-sm text-gray-600">{
+                  notionConnected
+                      ? 'Choose what you\'d like to import.'
+                      : 'Import tasks from your databases or pages'}
+                </p>
                 {notionConnected && (
-                  <div className="mt-1 text-xs font-medium text-emerald-600">Connected</div>
+                    <div className="mt-3 flex items-center gap-2 text-xs font-medium tracking-wide text-emerald-600">
+                      <span>✓</span>
+                      <span>Connected</span>
+                    </div>
                 )}
               </div>
             </div>
@@ -70,23 +82,34 @@ const Onboarding: React.FC = () => {
             {!notionConnected ? (
               <NotionConnectButton />
             ) : (
-              <div className="flex items-center gap-2">
-                <Button size="sm" variant="secondary" onClick={() => navigate('/notion/databases')}>
-                  Use Notion Database
+                <div className="ml-6 flex items-center gap-3">
+                <Button
+                    size="sm"
+                    variant="secondary"
+                    className={notionButtonClass}
+                    onClick={() => navigate('/notion/databases')}
+                >
+                  🗄 Database
                 </Button>
-                <Button size="sm" variant="secondary" onClick={() => navigate('/notion/pages')}>
-                  Use Notion Page
+
+                <Button
+                    size="sm"
+                    variant="secondary"
+                    className={notionButtonClass}
+                    onClick={() => navigate('/notion/pages')}
+                >
+                  📄 Page
                 </Button>
               </div>
             )}
           </div>
 
           <div className="flex items-center justify-between rounded-lg border border-gray-200 p-4">
-            <div className="flex items-center space-x-4">
+            <div className="flex flex-1 items-center space-x-4">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-100">
                 <span className="text-xl">📅</span>
               </div>
-              <div>
+              <div className="flex flex-col justify-center">
                 <h3 className="font-medium text-gray-900">Connect Calendar</h3>
                 <p className="text-sm text-gray-600">Sync with iCloud or Google Calendar</p>
               </div>
