@@ -20,22 +20,6 @@ export const apiClient = axios.create({
     withCredentials: true,
 })
 
-const CSRF_PROTECTED_ENDPOINTS = [
-    '/auth/signup',
-    '/auth/login',
-    '/auth/logout',
-    '/auth/refresh',
-    '/auth/verify',
-    '/auth/apple-signin',
-    '/auth/reset-password',
-    '/auth/reset-password/confirm',
-    '/auth/2fa/setup',
-    '/auth/2fa/setup/verify',
-    '/auth/2fa',
-    '/auth/2fa/verify',
-    '/auth/2fa/backup-codes',
-]
-
 apiClient.interceptors.request.use(
     async (config) => {
         config.withCredentials = true
@@ -43,16 +27,14 @@ apiClient.interceptors.request.use(
         const requestId = generateRequestId()
         config.headers['X-Request-ID'] = requestId
 
-        // Method/URL only — never log document.cookie or request bodies here.
-        // Bodies frequently contain passwords, tokens, or 2FA codes.
         log.debug('Request', { requestId, method: config.method?.toUpperCase(), url: config.url })
 
         const url = config.url ?? ''
-        const needsCsrf = CSRF_PROTECTED_ENDPOINTS.some(
-            (endpoint) => url === endpoint || url.startsWith(`${endpoint}?`)
-        )
+        const method = config.method?.toUpperCase()
+        const isStateChanging =
+            method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE'
 
-        if (needsCsrf) {
+        if (isStateChanging) {
             try {
                 config.headers['X-CSRF-Token'] = await csrfManager.getToken()
                 log.debug('CSRF token attached', { requestId, url })
