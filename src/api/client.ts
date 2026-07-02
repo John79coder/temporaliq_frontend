@@ -2,6 +2,9 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios'
 import { csrfManager } from './csrf'
 import { useAuthStore } from '@/stores/authStore'
+import { createLogger } from '@/utils/logger'
+
+const log = createLogger('api:client')
 
 const API_URL = ''  // Vite proxy
 
@@ -17,6 +20,22 @@ export const apiClient = axios.create({
     withCredentials: true,
 })
 
+const CSRF_PROTECTED_ENDPOINTS = [
+    '/auth/signup',
+    '/auth/login',
+    '/auth/logout',
+    '/auth/refresh',
+    '/auth/verify',
+    '/auth/apple-signin',
+    '/auth/reset-password',
+    '/auth/reset-password/confirm',
+    '/auth/2fa/setup',
+    '/auth/2fa/setup/verify',
+    '/auth/2fa',
+    '/auth/2fa/verify',
+    '/auth/2fa/backup-codes',
+]
+
 apiClient.interceptors.request.use(
     async (config) => {
         config.withCredentials = true
@@ -24,61 +43,31 @@ apiClient.interceptors.request.use(
         const requestId = generateRequestId()
         config.headers['X-Request-ID'] = requestId
 
-        console.log(`[API Request ${requestId}] ${config.method?.toUpperCase()} ${config.url}`)
-        console.log(`[API Request ${requestId}] Cookies:`, document.cookie)
-
-        const csrfProtectedEndpoints = [
-            '/auth/signup',
-            '/auth/login',
-            '/auth/logout',
-            '/auth/refresh',
-            '/auth/verify',
-            '/auth/apple-signin',
-            '/auth/reset-password',
-            '/auth/reset-password/confirm',
-            '/auth/2fa/setup',
-            '/auth/2fa/setup/verify',
-            '/auth/2fa',
-            '/auth/2fa/verify',
-            '/auth/2fa/backup-codes',
-        ]
+        // Method/URL only — never log document.cookie or request bodies here.
+        // Bodies frequently contain passwords, tokens, or 2FA codes.
+        log.debug('Request', { requestId, method: config.method?.toUpperCase(), url: config.url })
 
         const url = config.url ?? ''
-
-        const needsCsrf = csrfProtectedEndpoints.some(
-            endpoint => url === endpoint || url.startsWith(`${endpoint}?`)
+        const needsCsrf = CSRF_PROTECTED_ENDPOINTS.some(
+            (endpoint) => url === endpoint || url.startsWith(`${endpoint}?`)
         )
 
         if (needsCsrf) {
-            console.log(`[API Request ${requestId}] CSRF-protected endpoint, fetching CSRF token`)
-
             try {
-                const csrfToken = await csrfManager.getToken()
-                config.headers['X-CSRF-Token'] = csrfToken
-                console.log(`[API Request ${requestId}] Added CSRF token:`, csrfToken.substring(0, 10) + '...')
+                config.headers['X-CSRF-Token'] = await csrfManager.getToken()
+                log.debug('CSRF token attached', { requestId, url })
             } catch (error) {
-                console.error(`[API Request ${requestId}] Failed to get CSRF token:`, error)
+                log.warn('Failed to obtain CSRF token', { requestId, url, error: (error as Error).message })
                 throw error
             }
         }
 
         delete config.headers.Authorization
 
-        console.log(`[API Request ${requestId}] Final headers:`, {
-            ...config.headers,
-            'X-CSRF-Token': config.headers['X-CSRF-Token']
-                ? (config.headers['X-CSRF-Token'] as string).substring(0, 10) + '...'
-                : undefined,
-        })
-
-        if (config.data) {
-            console.log(`[API Request ${requestId}] Body:`, config.data)
-        }
-
         return config
     },
     (error) => {
-        console.error('[API Request Error]:', error)
+        log.error('Request setup failed', { error: error?.message })
         return Promise.reject(error)
     }
 )
@@ -86,85 +75,74 @@ apiClient.interceptors.request.use(
 apiClient.interceptors.response.use(
     (response) => {
         const requestId = response.config.headers?.['X-Request-ID']
-        console.log(`[API Response ${requestId}] Success:`, {
-            status: response.status,
-            url: response.config.url,
-            data: response.data,
-        })
-        console.log(`[API Response ${requestId}] Response headers:`, response.headers)
+        log.debug('Response', { requestId, status: response.status, url: response.config.url })
         return response
     },
     async (error: AxiosError) => {
         const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean }
         const requestId = originalRequest?.headers?.['X-Request-ID']
+        const status = error.response?.status
 
-        console.error(`[API Response ${requestId}] Error:`, {
-            status: error.response?.status,
-            data: error.response?.data,
-            headers: error.response?.headers,
-        })
+        log.warn('Response error', { requestId, status, url: originalRequest?.url })
 
-        if (error.response?.status === 403 && error.response?.data) {
-            const errorDetail = (error.response.data as any).detail
-            if (errorDetail && typeof errorDetail === 'string' && errorDetail.toLowerCase().includes('csrf')) {
-                console.log(`[API Response ${requestId}] CSRF error detected`)
+        if (status === 403) {
+            const errorDetail = (error.response?.data as any)?.detail
+            const isCsrfError = typeof errorDetail === 'string' && errorDetail.toLowerCase().includes('csrf')
 
-                if (!originalRequest._retry) {
-                    originalRequest._retry = true
-                    console.log(`[API Response ${requestId}] Clearing CSRF and retrying`)
+            if (isCsrfError && !originalRequest._retry) {
+                originalRequest._retry = true
+                log.info('CSRF token rejected, refreshing and retrying', { requestId, url: originalRequest.url })
 
-                    csrfManager.clearToken()
+                csrfManager.clearToken()
 
-                    try {
-                        const newCsrfToken = await csrfManager.getToken()
-                        if (originalRequest.headers) {
-                            originalRequest.headers['X-CSRF-Token'] = newCsrfToken
-                            console.log(`[API Response ${requestId}] Retrying with new CSRF token`)
-                        }
-                        return apiClient(originalRequest)
-                    } catch (csrfError) {
-                        console.error(`[API Response ${requestId}] CSRF retry failed:`, csrfError)
+                try {
+                    const newCsrfToken = await csrfManager.getToken()
+                    if (originalRequest.headers) {
+                        originalRequest.headers['X-CSRF-Token'] = newCsrfToken
                     }
+                    return apiClient(originalRequest)
+                } catch (csrfError) {
+                    log.error('CSRF retry failed', { requestId, error: (csrfError as Error).message })
                 }
             }
         }
 
-        if (error.response?.status === 401 && !originalRequest._retry) {
-            if (originalRequest.url?.includes('/auth/refresh') ||
+        if (status === 401 && !originalRequest._retry) {
+            const isAuthEndpoint =
+                originalRequest.url?.includes('/auth/refresh') ||
                 originalRequest.url?.includes('/auth/2fa/verify') ||
-                originalRequest.url?.includes('/auth/login')) {
-                console.log(`[API Response ${requestId}] Skipping refresh for auth endpoint`)
+                originalRequest.url?.includes('/auth/login')
+
+            if (isAuthEndpoint) {
+                log.info('401 on auth endpoint, not attempting refresh', { requestId, url: originalRequest.url })
                 csrfManager.clearToken()
 
-                if (!window.location.pathname.includes('/signin') &&
-                    !window.location.pathname.includes('/signup')) {
+                if (!window.location.pathname.includes('/signin') && !window.location.pathname.includes('/signup')) {
                     window.location.href = '/signin'
                 }
                 return Promise.reject(error)
             }
 
             originalRequest._retry = true
-            console.log(`[API Response ${requestId}] 401 Unauthorized, attempting cookie-based token refresh`)
+            log.info('401 received, attempting cookie-based token refresh', { requestId, url: originalRequest.url })
 
             try {
                 const refreshResponse = await apiClient.post('/auth/refresh', {})
                 const user = (refreshResponse.data as any).user
 
                 useAuthStore.getState().setUser(user)
-
-                console.log(`[API Response ${requestId}] Token refreshed via cookies, retrying original request`)
+                log.info('Token refresh succeeded, retrying original request', { requestId })
 
                 delete originalRequest.headers.Authorization
 
                 return apiClient(originalRequest)
             } catch (refreshError) {
-                console.error(`[API Response ${requestId}] Cookie-based refresh failed:`, refreshError)
+                log.warn('Token refresh failed, logging out', { requestId, error: (refreshError as Error).message })
 
                 useAuthStore.getState().logout()
                 csrfManager.clearToken()
 
-                if (!window.location.pathname.includes('/signin') &&
-                    !window.location.pathname.includes('/signup')) {
+                if (!window.location.pathname.includes('/signin') && !window.location.pathname.includes('/signup')) {
                     window.location.href = '/signin'
                 }
 
@@ -172,10 +150,10 @@ apiClient.interceptors.response.use(
             }
         }
 
-        if (error.response?.status === 429) {
-            console.error(`[API Response ${requestId}] Rate limit exceeded`)
-        } else if (error.response?.status === 500) {
-            console.error(`[API Response ${requestId}] Server error`)
+        if (status === 429) {
+            log.warn('Rate limit exceeded', { requestId, url: originalRequest?.url })
+        } else if (status === 500) {
+            log.error('Server error', { requestId, url: originalRequest?.url })
         }
 
         return Promise.reject(error)
@@ -184,7 +162,5 @@ apiClient.interceptors.response.use(
 
 if (import.meta.env.DEV) {
     (window as any).apiClient = apiClient
-    console.log('[API Client] Debug: window.apiClient available for inspection')
+    log.debug('window.apiClient exposed for dev inspection')
 }
-
-export default apiClient

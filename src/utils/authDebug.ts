@@ -1,39 +1,50 @@
 // src/utils/authDebug.ts
-// Debug helper to check auth storage state
+// Debug helper to check auth storage state — dev-only diagnostic tool.
 
-export const debugAuthStorage = () => {
+import { createLogger, redact } from './logger'
+
+const log = createLogger('utils:authDebug')
+const isDev = Boolean(import.meta.env?.DEV)
+
+export const debugAuthStorage = async () => {
+    if (!isDev) return
+
     console.group('🔐 Auth Storage Debug')
 
-    // Check direct storage
-    console.log('Direct user_data:', localStorage.getItem('user_data'))
+    console.log('Direct user_data (redacted):', redact(safeParse(localStorage.getItem('user_data'))))
 
-    // Check Zustand persisted auth
     const authStore = localStorage.getItem('auth')
     if (authStore) {
         try {
             const parsed = JSON.parse(authStore)
-            console.log('Zustand auth store:', parsed)
-            console.log('Zustand token:', parsed?.state?.token || parsed?.token)
-            console.log('Zustand user:', parsed?.state?.user || parsed?.user)
+            // Note: authStore's persist() only ever writes { user }, via its
+            // partialize config — there is no token field in this store.
+            console.log('Zustand auth store user (redacted):', redact(parsed?.state?.user || parsed?.user))
         } catch (e) {
-            console.error('Failed to parse auth store:', e)
+            log.warn('Failed to parse auth store', { error: (e as Error).message })
         }
     } else {
         console.log('No Zustand auth store found')
     }
 
-    // Check session storage
-    console.log('Session user_data:', sessionStorage.getItem('user_data'))
+    console.log('Session user_data (redacted):', redact(safeParse(sessionStorage.getItem('user_data'))))
 
-    // Check what getStoredToken returns
-    import('./storage').then(module => {
-        console.log('getStoredUser() returns:', module.getStoredUser())
-    })
+    const { getStoredUser } = await import('./storage')
+    console.log('getStoredUser() returns (redacted):', redact(getStoredUser()))
 
     console.groupEnd()
 }
 
-// Make it available globally in dev mode
-if (import.meta.env.DEV) {
+function safeParse(raw: string | null): unknown {
+    if (!raw) return null
+    try {
+        return JSON.parse(raw)
+    } catch {
+        return raw
+    }
+}
+
+// Only ever attached in dev builds.
+if (isDev && typeof window !== 'undefined') {
     (window as any).debugAuthStorage = debugAuthStorage
 }

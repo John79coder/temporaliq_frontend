@@ -1,4 +1,7 @@
 // src/utils/storage.ts
+import { createLogger } from './logger'
+
+const log = createLogger('utils:storage')
 
 const USER_KEY = 'user_data'
 const AUTH_STORE_KEY = 'auth'
@@ -25,7 +28,7 @@ export const getStoredUser = (): any => {
 
         return null
     } catch (error) {
-        console.error('Error reading user from storage:', error)
+        log.warn('Failed to read stored user', { error: (error as Error).message })
         return null
     }
 }
@@ -41,7 +44,7 @@ export const setStoredUser = (user: any, rememberMe: boolean = true): void => {
             localStorage.removeItem(USER_KEY)
         }
     } catch (error) {
-        console.error('Error storing user:', error)
+        log.warn('Failed to store user', { error: (error as Error).message })
     }
 }
 
@@ -58,7 +61,7 @@ export const clearAuthData = (): void => {
 
         localStorage.removeItem(AUTH_STORE_KEY)
     } catch (error) {
-        console.error('Error clearing auth data:', error)
+        log.warn('Failed to clear auth data', { error: (error as Error).message })
     }
 }
 
@@ -66,7 +69,7 @@ export const getRememberMe = (): boolean => {
     try {
         return localStorage.getItem(REMEMBER_ME_KEY) === 'true'
     } catch (error) {
-        console.error('Error reading remember me preference:', error)
+        log.warn('Failed to read remember-me preference', { error: (error as Error).message })
         return false
     }
 }
@@ -75,7 +78,7 @@ export const setRememberMe = (value: boolean): void => {
     try {
         localStorage.setItem(REMEMBER_ME_KEY, String(value))
     } catch (error) {
-        console.error('Error storing remember me preference:', error)
+        log.warn('Failed to store remember-me preference', { error: (error as Error).message })
     }
 }
 
@@ -87,7 +90,7 @@ export const getStoredTheme = (): 'light' | 'dark' | 'system' => {
         }
         return 'system'
     } catch (error) {
-        console.error('Error reading theme preference:', error)
+        log.warn('Failed to read theme preference', { error: (error as Error).message })
         return 'system'
     }
 }
@@ -96,7 +99,7 @@ export const setStoredTheme = (theme: 'light' | 'dark' | 'system'): void => {
     try {
         localStorage.setItem(THEME_KEY, theme)
     } catch (error) {
-        console.error('Error storing theme preference:', error)
+        log.warn('Failed to store theme preference', { error: (error as Error).message })
     }
 }
 
@@ -105,7 +108,7 @@ export const getStoredPreferences = (): Record<string, any> => {
         const prefs = localStorage.getItem(PREFERENCES_KEY)
         return prefs ? JSON.parse(prefs) : {}
     } catch (error) {
-        console.error('Error reading preferences:', error)
+        log.warn('Failed to read preferences', { error: (error as Error).message })
         return {}
     }
 }
@@ -114,6 +117,6 @@ export const setStoredPreferences = (preferences: Record<string, any>): void => 
     try {
         localStorage.setItem(PREFERENCES_KEY, JSON.stringify(preferences))
     } catch (error) {
-        console.error('Error storing preferences:', error)
+        log.warn('Failed to store preferences', { error: (error as Error).message })
     }
 }

@@ -1,5 +1,8 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
+import { createLogger } from '@/utils/logger'
+
+const log = createLogger('auth:store')
 
 export type User = {
     id: string | number
@@ -34,31 +37,40 @@ export const useAuthStore = create<AuthState>()(
             isAuthenticated: false,
 
             setHydrated: (v) =>
-                set((state) => ({
-                    hydrated: v,
-                    isLoading: false,
-                    isAuthenticated: Boolean(state.user),
-                })),
+                set((state) => {
+                    log.debug('hydrated', { hasUser: Boolean(state.user) })
+                    return {
+                        hydrated: v,
+                        isLoading: false,
+                        isAuthenticated: Boolean(state.user),
+                    }
+                }),
 
-            login: ({ user }) =>
+            login: ({ user }) => {
+                log.info('login', { userId: user.id })
                 set(() => ({
                     user,
                     isAuthenticated: true,
                     isLoading: false,
-                })),
+                }))
+            },
 
-            logout: () =>
+            logout: () => {
+                log.info('logout')
                 set(() => ({
                     user: null,
                     isAuthenticated: false,
                     isLoading: false,
-                })),
+                }))
+            },
 
-            setUser: (user) =>
+            setUser: (user) => {
+                log.debug('setUser', { userId: user?.id ?? null })
                 set(() => ({
                     user,
                     isAuthenticated: Boolean(user),
-                })),
+                }))
+            },
 
             setLoading: (loading) =>
                 set(() => ({
