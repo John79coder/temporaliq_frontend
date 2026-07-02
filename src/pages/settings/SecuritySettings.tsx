@@ -9,14 +9,15 @@ import { Shield, Smartphone, Key, AlertTriangle, CheckCircle, XCircle } from 'lu
 import toast from 'react-hot-toast'
 
 interface SecurityInfo {
-    two_factor_enabled: boolean
     codes_remaining: number
 }
 
 export const SecuritySettings: React.FC = () => {
     const navigate = useNavigate()
-    const { user, isAuthenticated, token, hydrated, isLoading: authLoading } = useAuthStore()
-    const [securityInfo, setSecurityInfo] = useState<SecurityInfo | null>(null)
+    const { user, isAuthenticated, hydrated, isLoading: authLoading } = useAuthStore()
+    const [securityInfo, setSecurityInfo] = useState<SecurityInfo>({
+        codes_remaining: 0,
+    })
     const [isLoading, setIsLoading] = useState(true)
     const [showDisableConfirm, setShowDisableConfirm] = useState(false)
     const [showBackupCodes, setShowBackupCodes] = useState(false)
@@ -28,13 +29,12 @@ export const SecuritySettings: React.FC = () => {
     const loadSecurityInfo = async () => {
         console.log('[SecuritySettings] loadSecurityInfo called', {
             isAuthenticated,
-            hasToken: !!token,
             user,
             userFrom2FA: user?.two_factor_enabled
         })
 
         // Don't try to load if not authenticated
-        if (!isAuthenticated || !token) {
+        if (!isAuthenticated || !user) {
             console.error('[SecuritySettings] Cannot load security info - user not authenticated')
             setIsLoading(false)
             return
@@ -48,13 +48,11 @@ export const SecuritySettings: React.FC = () => {
 
             setSecurityInfo(info)
 
-            // Update debug info
             setDebugInfo({
-                userStore2FA: user?.two_factor_enabled,
-                apiResponse2FA: info.two_factor_enabled,
-                mismatch: user?.two_factor_enabled !== info.two_factor_enabled,
+                codesRemaining: info.codes_remaining,
                 timestamp: new Date().toISOString()
             })
+
         } catch (error: any) {
             console.error('Failed to load security info:', error)
 
@@ -66,7 +64,7 @@ export const SecuritySettings: React.FC = () => {
             }
 
             // For other errors, set default state
-            setSecurityInfo({ two_factor_enabled: false, codes_remaining: 0 })
+            setSecurityInfo({ codes_remaining: 0 })
             setDebugInfo({
                 error: error.message,
                 timestamp: new Date().toISOString()
@@ -77,46 +75,20 @@ export const SecuritySettings: React.FC = () => {
     }
 
     useEffect(() => {
-        console.log('[SecuritySettings] useEffect triggered', {
-            hydrated,
-            authLoading,
-            isAuthenticated,
-            hasToken: !!token,
-            user
-        })
-
-        // Wait for auth store to be hydrated
         if (!hydrated || authLoading) {
-            console.log('[SecuritySettings] Waiting for hydration...')
-            return // Wait for hydration to complete
+            return
         }
 
-        // Once hydrated, check authentication and load security info
-        if (isAuthenticated && token) {
-            console.log('[SecuritySettings] Authenticated, loading security info...')
+        if (isAuthenticated && user) {
             loadSecurityInfo()
         } else {
-            console.log('[SecuritySettings] Not authenticated after hydration')
-            // Not authenticated after hydration
             setIsLoading(false)
         }
-    }, [hydrated, authLoading, isAuthenticated, token])
-
-    // Also update the user's 2FA status when returning from setup
-    useEffect(() => {
-        if (user && securityInfo && user.two_factor_enabled !== securityInfo.two_factor_enabled) {
-            console.log('[SecuritySettings] 2FA status mismatch detected, updating user store')
-            // Update user object if 2FA status has changed
-            useAuthStore.getState().setUser({
-                ...user,
-                two_factor_enabled: securityInfo.two_factor_enabled
-            })
-        }
-    }, [user, securityInfo])
+    }, [hydrated, authLoading, isAuthenticated, user])
 
     const handleEnable2FA = () => {
         // Verify authentication before navigating to 2FA setup
-        if (!isAuthenticated || !token) {
+        if (!isAuthenticated || !user) {
             toast.error('Please login first')
             navigate('/signin', { replace: true })
             return
@@ -125,7 +97,7 @@ export const SecuritySettings: React.FC = () => {
     }
 
     const handleDisable2FA = async () => {
-        if (!isAuthenticated || !token) {
+        if (!isAuthenticated || !user) {
             toast.error('Please login first')
             navigate('/signin', { replace: true })
             return
@@ -135,7 +107,7 @@ export const SecuritySettings: React.FC = () => {
         try {
             await disable2FA()
             toast.success('Two-factor authentication disabled')
-            setSecurityInfo({ two_factor_enabled: false, codes_remaining: 0 })
+            setSecurityInfo({ codes_remaining: 0 })
             setShowDisableConfirm(false)
 
             // Update user in store
@@ -161,7 +133,7 @@ export const SecuritySettings: React.FC = () => {
     }
 
     const handleRegenerateBackupCodes = async () => {
-        if (!isAuthenticated || !token) {
+        if (!isAuthenticated || !user) {
             toast.error('Please login first')
             navigate('/signin', { replace: true })
             return
@@ -238,9 +210,7 @@ Store these codes in a secure location. You will need them if you lose access to
                     <h3 className="font-semibold text-yellow-800 mb-2">Debug Info</h3>
                     <div className="text-xs font-mono text-yellow-700 space-y-1">
                         <div>Auth Store User 2FA: {String(user?.two_factor_enabled)}</div>
-                        <div>API Response 2FA: {String(securityInfo?.two_factor_enabled)}</div>
-                        <div>Codes Remaining: {securityInfo?.codes_remaining ?? 'N/A'}</div>
-                        <div>Mismatch: {String(debugInfo.mismatch)}</div>
+                        <div>Codes Remaining: {securityInfo.codes_remaining ?? 'N/A'}</div>
                         <div>Last Updated: {debugInfo.timestamp}</div>
                         <div>Hydrated: {String(hydrated)}</div>
                         <div>Authenticated: {String(isAuthenticated)}</div>
@@ -277,7 +247,7 @@ Store these codes in a secure location. You will need them if you lose access to
                                     Add an extra layer of security to your account
                                 </p>
                                 <div className="flex items-center space-x-2">
-                                    {securityInfo?.two_factor_enabled ? (
+                                    {user?.two_factor_enabled ? (
                                         <>
                                             <CheckCircle className="w-5 h-5 text-green-600" />
                                             <span className="text-green-600 font-medium">Enabled</span>
@@ -292,7 +262,7 @@ Store these codes in a secure location. You will need them if you lose access to
                             </div>
                         </div>
                         <div>
-                            {securityInfo?.two_factor_enabled ? (
+                            {user?.two_factor_enabled ? (
                                 <Button
                                     variant="secondary"
                                     size="sm"
@@ -314,7 +284,7 @@ Store these codes in a secure location. You will need them if you lose access to
             </div>
 
             {/* Backup Codes Section - Only show if 2FA is enabled */}
-            {securityInfo?.two_factor_enabled && (
+            {user?.two_factor_enabled && (
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6">
                     <div className="p-6">
                         <div className="flex items-start justify-between">
@@ -353,7 +323,7 @@ Store these codes in a secure location. You will need them if you lose access to
 
                         {securityInfo.codes_remaining === 0 && (
                             <Alert
-                                type="warning"
+                                variant="warning"
                                 className="mt-4"
                             >
                                 <AlertTriangle className="w-4 h-4" />
@@ -380,7 +350,7 @@ Store these codes in a secure location. You will need them if you lose access to
                             <p className="text-gray-600 text-sm mb-4">
                                 Use an authenticator app like Google Authenticator or Authy to generate verification codes.
                             </p>
-                            {securityInfo?.two_factor_enabled ? (
+                            {user.two_factor_enabled ? (
                                 <p className="text-sm text-green-600 font-medium">
                                     ✓ Authenticator app configured
                                 </p>
@@ -416,7 +386,7 @@ Store these codes in a secure location. You will need them if you lose access to
                                 Cancel
                             </Button>
                             <Button
-                                variant="danger"
+                                variant="destructive"
                                 onClick={handleDisable2FA}
                                 isLoading={isLoading}
                                 className="flex-1"
@@ -433,7 +403,7 @@ Store these codes in a secure location. You will need them if you lose access to
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
                     <div className="bg-white rounded-lg max-w-lg w-full p-6">
                         <h3 className="text-lg font-semibold mb-4">Your New Backup Codes</h3>
-                        <Alert type="warning" className="mb-4">
+                        <Alert variant="warning" className="mb-4">
                             <AlertTriangle className="w-4 h-4" />
                             <span>
                                 Save these codes in a secure location. Each code can only be used once.

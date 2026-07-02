@@ -2,15 +2,14 @@
 import React, { useEffect, useRef } from 'react'
 import { Outlet, useNavigate, Link, useLocation } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
-import { logout as apiLogout } from '@/api/auth'
-import { getStoredToken, getStoredUser, setStoredUser, removeStoredToken } from '@/utils/storage'
+import { logout as apiLogout, getCurrentUser } from '@/api/auth'
 import { cn } from '@/utils/cn'
 import toast from 'react-hot-toast'
 
 const AppLayout: React.FC = () => {
     const navigate = useNavigate()
     const location = useLocation()
-    const { user, setUser, setLoading, logout, login } = useAuthStore()
+    const { user, setLoading, logout, login } = useAuthStore()
 
     // Prevent dev-mode double execution of the bootstrap effect
     const initRanRef = useRef(false)
@@ -22,62 +21,17 @@ const AppLayout: React.FC = () => {
         const initAuth = async () => {
             setLoading(true)
 
-            const token = getStoredToken()
-
-            if (!token) {
-                setLoading(false)
-                // no navigate here; allow route guards to decide
-                return
-            }
-
-            // Check if this is a temporary session
-            const isTempSession = sessionStorage.getItem('temp_session')
-            if (isTempSession && !sessionStorage.getItem('session_active')) {
-                // Browser was closed and reopened
-                removeStoredToken()
-                setLoading(false)
-                // no navigate here; allow route guards to decide
-                return
-            }
-
-            // Mark session as active
-            sessionStorage.setItem('session_active', 'true')
-
             try {
-                // Try to get user from storage first for faster load
-                const storedUser = getStoredUser()
-                if (storedUser) {
-                    setUser(storedUser)
-                }
+                const fetchedUser = await getCurrentUser()
 
-                // Update auth store with fresh user data and token
-                login({ user: storedUser, token })
-                setStoredUser(storedUser)
-
-                // Check if user needs to verify email
-                if (!storedUser?.is_verified) {
-                    toast.error('Please verify your email to continue')
-                    // no navigate here; allow route guards to decide
-                }
-            } catch (error: any) {
-                console.error('Failed to fetch user:', error)
-
-                if (error.response?.status === 401 || error.message === 'Unauthorized') {
-                    // Token is invalid
-                    removeStoredToken()
-                    logout()
-                    // no navigate here; allow route guards to decide
+                if (fetchedUser) {
+                    login({ user: fetchedUser })
                 } else {
-                    // Network error - try to use stored user
-                    const storedUser = getStoredUser()
-                    if (storedUser && token) {
-                        login({ user: storedUser, token })
-                    } else {
-                        // No stored user, must re-authenticate
-                        logout()
-                        // no navigate here; allow route guards to decide
-                    }
+                    logout()
                 }
+            } catch {
+                // Not authenticated or session expired
+                logout()
             } finally {
                 setLoading(false)
             }
@@ -88,14 +42,11 @@ const AppLayout: React.FC = () => {
 
     const handleLogout = async () => {
         try {
-            // Call API logout
             await apiLogout()
         } catch (error) {
             console.error('Logout error:', error)
         } finally {
-            // Always clear local data and redirect
             logout()
-            removeStoredToken()
             sessionStorage.clear()
             toast.success('Logged out successfully')
             navigate('/signin')
@@ -108,18 +59,15 @@ const AppLayout: React.FC = () => {
         { path: '/settings/security', label: 'Security', icon: '🔐' },
     ]
 
-    // Helper function to format user status
     const getUserStatus = () => {
         if (!user) return ''
 
         const parts = []
 
-        // Add 2FA indicator if enabled
         if (user.two_factor_enabled) {
             parts.push('🔐 2FA')
         }
 
-        // Add subscription status
         if (user.isInTrial) {
             parts.push('Trial')
         } else if (user.isSubscribed) {

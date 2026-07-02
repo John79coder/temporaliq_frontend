@@ -1,19 +1,15 @@
-// ============================================
-// src/components/auth/EmailSignInForm.tsx - UPDATED FOR BACKEND
-// ============================================
+// src/components/auth/EmailSignInForm.tsx
 import React, { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { useAuthStore } from '@/stores/authStore'
 import { signInWithEmail } from '@/api/auth'
 import { Input } from '@/components/common/Input'
 import { Button } from '@/components/common/Button'
 import { validateEmail } from '@/utils/validators'
-import { setStoredUser, setStoredToken, setRefreshToken } from '@/utils/storage'
+import { setRememberMe } from '@/utils/storage'
 import toast from 'react-hot-toast'
 
 export const EmailSignInForm: React.FC = () => {
     const navigate = useNavigate()
-    const { login } = useAuthStore()
 
     const [formData, setFormData] = useState({
         email: '',
@@ -26,20 +22,17 @@ export const EmailSignInForm: React.FC = () => {
     })
 
     const [isLoading, setIsLoading] = useState(false)
-    const [rememberMe, setRememberMe] = useState(false)
+    const [rememberMe, setRememberMeState] = useState(false)
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target
         setFormData(prev => ({ ...prev, [name]: value }))
-
-        // Clear error for this field
         setErrors(prev => ({ ...prev, [name]: '' }))
     }
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
 
-        // Validation
         const newErrors = {
             email: '',
             password: '',
@@ -63,13 +56,10 @@ export const EmailSignInForm: React.FC = () => {
         setIsLoading(true)
 
         try {
-            const response = await signInWithEmail(formData)
-
-            // Check if 2FA is required
-            // Inside handleSubmit, replace the 2FA section:
+            const response = await signInWithEmail(formData, rememberMe)
 
             if (response.requires_2fa) {
-                sessionStorage.setItem('2fa_temp_token', response.temp_token || '')
+                sessionStorage.setItem('2fa_user_id', response.user_id || '')
                 sessionStorage.setItem('2fa_user', JSON.stringify(response.user || { email: formData.email }))
 
                 toast('Two-factor code required', {
@@ -80,31 +70,16 @@ export const EmailSignInForm: React.FC = () => {
                 return
             }
 
-            // Store user data - FIX: Use the correct token field from response
-            const token = response.access_token || response.jwt // Handle both field names
-
-            if (!token) {
-                throw new Error('No authentication token received')
+            if (!response.user) {
+                setIsLoading(false)
+                toast.error('No user received from server')
+                return
             }
 
-            setStoredUser(response.user)
-            setStoredToken(token)
-            if (response.refresh_token) {
-                setRefreshToken(response.refresh_token)
-            }
+            setRememberMe(rememberMe)
 
-            login({ user: response.user as any, token: token })
-
-            // Handle remember me
-            if (!rememberMe) {
-                // Set session storage flag to clear on browser close
-                sessionStorage.setItem('temp_session', 'true')
-            }
-
-            // Show success message
             toast.success(`Welcome back!`)
 
-            // Navigate based on user status
             if (!response.user.is_verified) {
                 navigate('/verify-email')
             } else if (response.user.isInTrial && !response.user.has_used_free_preview) {
@@ -115,7 +90,6 @@ export const EmailSignInForm: React.FC = () => {
         } catch (error: any) {
             console.error('Sign in error:', error)
 
-            // Handle specific error cases
             if (error.message.includes('not verified')) {
                 setErrors({ ...errors, password: 'Please verify your email first' })
                 toast.error('Please check your email for verification link')
@@ -163,7 +137,7 @@ export const EmailSignInForm: React.FC = () => {
                     <input
                         type="checkbox"
                         checked={rememberMe}
-                        onChange={(e) => setRememberMe(e.target.checked)}
+                        onChange={(e) => setRememberMeState(e.target.checked)}
                         className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
                     />
                     <span className="ml-2 text-sm text-gray-600">Remember me</span>

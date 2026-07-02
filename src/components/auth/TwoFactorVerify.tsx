@@ -1,13 +1,11 @@
 // src/components/auth/TwoFactorVerify.tsx
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { verify2FA } from '@/api/auth'
-import { useAuthStore } from '@/stores/authStore'
-import { setStoredUser, setStoredToken } from '@/utils/storage'
 import { Button } from '@/components/common/Button'
 import { Input } from '@/components/common/Input'
 import { Alert } from '@/components/common/Alert'
 import { Shield, Smartphone, Key } from 'lucide-react'
+import { verify2FA } from '@/api/auth'
 import toast from 'react-hot-toast'
 
 export const TwoFactorVerify: React.FC = () => {
@@ -15,21 +13,21 @@ export const TwoFactorVerify: React.FC = () => {
     const [code, setCode] = useState('')
     const [isLoading, setIsLoading] = useState(false)
     const [useBackupCode, setUseBackupCode] = useState(false)
-    const [tempToken, setTempToken] = useState<string | null>(null)
+    const [userId, setUserId] = useState<string | null>(null)
     const [userData, setUserData] = useState<any>(null)
 
     useEffect(() => {
-        // Get temporary token and user data from session storage
-        const token = sessionStorage.getItem('2fa_temp_token')
+        // Get user ID and user data from session storage
+        const userId = sessionStorage.getItem('2fa_user_id')
         const user = sessionStorage.getItem('2fa_user')
 
-        if (!token || !user) {
+        if (!userId || !user) {
             toast.error('Session expired. Please login again.')
             navigate('/signin')
             return
         }
 
-        setTempToken(token)
+        setUserId(userId)
         setUserData(JSON.parse(user))
     }, [navigate])
 
@@ -49,35 +47,17 @@ export const TwoFactorVerify: React.FC = () => {
         setIsLoading(true)
 
         try {
-            const response = await verify2FA({
+
+            await verify2FA({
                 code: codeToVerify,
-                user_id: tempToken!
+                user_id: userId ?? undefined,
             })
 
-            // Clear session storage
-            sessionStorage.removeItem('2fa_temp_token')
+            sessionStorage.removeItem('2fa_user_id')
             sessionStorage.removeItem('2fa_user')
 
-            // CRITICAL FIX: Use access_token from response, not jwt
-            // The verify2FA function returns { user, access_token, refresh_token }
-            const token = response.access_token || response.jwt
-
-            if (!token) {
-                console.error('No token received from 2FA verification')
-                throw new Error('Authentication token missing')
-            }
-
-            // Store authentication data
-            setStoredUser(response.user)
-            setStoredToken(token)
-
-            // Update auth store
-            useAuthStore.getState().login({
-                user: response.user as any,
-                token: token
-            })
-
             toast.success('Successfully authenticated!')
+
 
             // Navigate to home page or intended destination
             // Using '/' instead of '/dashboard' which may not exist
@@ -108,7 +88,7 @@ export const TwoFactorVerify: React.FC = () => {
 
     const handleCancel = () => {
         // Clear session and go back to login
-        sessionStorage.removeItem('2fa_temp_token')
+        sessionStorage.removeItem('2fa_user_id')
         sessionStorage.removeItem('2fa_user')
         navigate('/signin')
     }
@@ -119,7 +99,7 @@ export const TwoFactorVerify: React.FC = () => {
         }
     }
 
-    if (!tempToken || !userData) {
+    if (!userId || !userData) {
         return null
     }
 

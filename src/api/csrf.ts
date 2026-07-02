@@ -2,7 +2,7 @@
 import axios from 'axios';
 import { debugLogger } from './debugHelpers';
 
-const API_URL = '';  // Use Vite proxy for same-origin requests in dev
+const API_URL = '';  // Vite proxy
 
 class CSRFManager {
     private tokenPromise: Promise<string> | null = null;
@@ -10,9 +10,23 @@ class CSRFManager {
     private lastFetchTime: number | null = null;
     private lastToken: string | null = null;
 
+    getTokenFromCookie(): string | null {
+        const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/);
+        if (!match) return null;
+        try {
+            return decodeURIComponent(match[1]);
+        } catch {
+            return match[1];
+        }
+    }
+
     async getToken(): Promise<string> {
         debugLogger.logCookieState('CSRF getToken called');
         console.log('[CSRFManager] getToken called');
+
+        if (this.lastToken) {
+            return this.lastToken;
+        }
 
         if (!this.tokenPromise) {
             console.log('[CSRFManager] Creating new token promise');
@@ -49,12 +63,14 @@ class CSRFManager {
             };
 
             debugLogger.logNetworkRequest({ ...config, url: `${API_URL}/auth/csrf`, method: 'GET' }, 'CSRF Fetch');
-            const response = await axios.get(`${API_URL}/auth/csrf`, config);  // Relative path -> Vite proxy
+            const response = await axios.get(`${API_URL}/auth/csrf`, config);
             debugLogger.logNetworkResponse(response, 'CSRF Fetch');
             debugLogger.logCookieState('After CSRF fetch');
 
             const token = response.data.csrf_token;
-            if (!token) throw new Error('No CSRF token in response');
+            if (!token) {
+                throw new Error('No CSRF token returned from backend');
+            }
 
             console.log('✅ CSRF token fetched successfully');
             console.log('Debug info from server:', response.data.debug);

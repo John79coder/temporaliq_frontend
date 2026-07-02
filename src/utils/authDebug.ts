@@ -5,8 +5,6 @@ export const debugAuthStorage = () => {
     console.group('🔐 Auth Storage Debug')
 
     // Check direct storage
-    console.log('Direct access_token:', localStorage.getItem('access_token'))
-    console.log('Direct refresh_token:', localStorage.getItem('refresh_token'))
     console.log('Direct user_data:', localStorage.getItem('user_data'))
 
     // Check Zustand persisted auth
@@ -25,12 +23,10 @@ export const debugAuthStorage = () => {
     }
 
     // Check session storage
-    console.log('Session access_token:', sessionStorage.getItem('access_token'))
     console.log('Session user_data:', sessionStorage.getItem('user_data'))
 
     // Check what getStoredToken returns
     import('./storage').then(module => {
-        console.log('getStoredToken() returns:', module.getStoredToken())
         console.log('getStoredUser() returns:', module.getStoredUser())
     })
 

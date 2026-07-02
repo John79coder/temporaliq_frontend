@@ -1,9 +1,7 @@
 // src/components/auth/AppleSignInButton.tsx
 import React, { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAuthStore } from '@/stores/authStore'
 import { signInWithApple } from '@/api/auth'
-import { setStoredUser, setStoredToken, setRefreshToken } from '@/utils/storage'
 import toast from 'react-hot-toast'
 
 declare global {
@@ -46,19 +44,16 @@ interface AppleSignInResponse {
 
 export const AppleSignInButton: React.FC = () => {
     const navigate = useNavigate()
-    const { login } = useAuthStore()
     const [isLoading, setIsLoading] = useState(false)
     const [isScriptLoaded, setIsScriptLoaded] = useState(false)
 
     useEffect(() => {
-        // Check if Apple Sign In SDK is already loaded
         if (window.AppleID) {
             initializeAppleSignIn()
             setIsScriptLoaded(true)
             return
         }
 
-        // Load Apple Sign In SDK
         const script = document.createElement('script')
         script.src = 'https://appleid.cdn-apple.com/appleauth/static/jsapi/appleid/1/en_US/appleid.auth.js'
         script.async = true
@@ -77,7 +72,6 @@ export const AppleSignInButton: React.FC = () => {
         document.body.appendChild(script)
 
         return () => {
-            // Cleanup: Remove script if component unmounts
             if (script.parentNode) {
                 document.body.removeChild(script)
             }
@@ -101,13 +95,11 @@ export const AppleSignInButton: React.FC = () => {
     }
 
     const generateState = (): string => {
-        // Generate a random state for CSRF protection
         return Math.random().toString(36).substring(2, 15) +
             Math.random().toString(36).substring(2, 15)
     }
 
     const handleAppleSignIn = async () => {
-        // Check if Apple Sign In is properly configured
         const appleClientId = import.meta.env.VITE_APPLE_CLIENT_ID
 
         if (!appleClientId || appleClientId === 'com.smartscheduler.web') {
@@ -123,12 +115,10 @@ export const AppleSignInButton: React.FC = () => {
         setIsLoading(true)
 
         try {
-            // Trigger Apple Sign In popup
             const response = await window.AppleID.auth.signIn({
                 state: generateState()
             })
 
-            // Send authorization data to backend
             const authResponse = await signInWithApple({
                 id_token: response.authorization.id_token,
                 authorization_code: response.authorization.code,
@@ -138,44 +128,31 @@ export const AppleSignInButton: React.FC = () => {
                 } : undefined
             })
 
-            // Check if 2FA is required
             if (authResponse.requires_2fa) {
-                // Store temporary token for 2FA verification
-                sessionStorage.setItem('2fa_temp_token', authResponse.temp_token)
+                sessionStorage.setItem('2fa_user_id', authResponse.user_id ?? '')
                 sessionStorage.setItem('2fa_user', JSON.stringify(authResponse.user))
-
-                // Navigate to 2FA verification page
                 navigate('/auth/2fa-verify')
                 return
             }
 
-            // Store user data and tokens
-            setStoredUser(authResponse.user)
-            setStoredToken(authResponse.jwt)
-            if (authResponse.refresh_token) {
-                setRefreshToken(authResponse.refresh_token)
+            if (!authResponse.user) {
+                toast.error('No user received from Apple Sign In')
+                return
             }
 
-            // Update auth store
-            login(authResponse.user, authResponse.jwt)
-
-            // Show success message
             toast.success(`Welcome${authResponse.user.name ? ', ' + authResponse.user.name : ''}!`)
 
-            // Navigate based on user status
             if (!authResponse.user.is_verified) {
                 navigate('/verify-email')
             } else if (authResponse.user.is_new_user) {
                 navigate('/onboarding')
             } else {
-                navigate('/dashboard')
+                navigate('/')
             }
         } catch (error: any) {
             console.error('Apple Sign In failed:', error)
 
-            // Handle specific error cases
             if (error.error === 'popup_closed_by_user') {
-                // User cancelled - no need to show error
                 return
             } else if (error.error === 'popup_blocked') {
                 toast.error('Please allow popups for Apple Sign In')

@@ -1,12 +1,10 @@
 // src/api/client.ts
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios'
-import { getStoredToken, removeStoredToken, setStoredToken, getRefreshToken, setRefreshToken } from '@/utils/storage'
 import { csrfManager } from './csrf'
-import { cookieAuthManager } from './cookieAuth';
+import { useAuthStore } from '@/stores/authStore'
 
-const API_URL = '';  // Use Vite proxy for same-origin requests in dev
+const API_URL = ''  // Vite proxy
 
-// Request ID generator for tracking
 let requestCounter = 0
 const generateRequestId = () => `req-${Date.now()}-${++requestCounter}`
 
@@ -16,53 +14,24 @@ export const apiClient = axios.create({
     headers: {
         'Content-Type': 'application/json',
     },
-    withCredentials: true, // Important for CSRF cookies
+    withCredentials: true,
 })
 
-// === ENHANCED FOR 2FA: Token refresh queue management ===
-let isRefreshing = false
-let refreshSubscribers: Array<(token: string) => void> = []
-
-const subscribeTokenRefresh = (cb: (token: string) => void) => {
-    refreshSubscribers.push(cb)
-}
-
-const onTokenRefreshed = (token: string) => {
-    refreshSubscribers.forEach((cb) => cb(token))
-    refreshSubscribers = []
-}
-// === END 2FA ENHANCEMENT ===
-
-// Request interceptor for auth token and CSRF
 apiClient.interceptors.request.use(
     async (config) => {
-        // Always send credentials for cookie support
-        config.withCredentials = true;
+        config.withCredentials = true
 
-        // Add request ID
         const requestId = generateRequestId()
         config.headers['X-Request-ID'] = requestId
 
         console.log(`[API Request ${requestId}] ${config.method?.toUpperCase()} ${config.url}`)
         console.log(`[API Request ${requestId}] Cookies:`, document.cookie)
 
-        // Add JWT token from localStorage only if no cookie auth
-        // This maintains backward compatibility while preferring cookies
-        if (cookieAuthManager.shouldSendAuthHeader()) {
-            const token = getStoredToken()
-            if (token && config.headers) {
-                config.headers.Authorization = `Bearer ${token}`
-                console.log(`[API Request ${requestId}] Added JWT token from localStorage`)
-            }
-        } else {
-            console.log(`[API Request ${requestId}] Using cookie-based auth`)
-        }
-
-        // Add CSRF token to endpoints that require it
         const csrfProtectedEndpoints = [
             '/auth/signup',
             '/auth/login',
             '/auth/logout',
+            '/auth/refresh',
             '/auth/verify',
             '/auth/apple-signin',
             '/auth/reset-password',
@@ -74,7 +43,11 @@ apiClient.interceptors.request.use(
             '/auth/2fa/backup-codes',
         ]
 
-        const needsCsrf = csrfProtectedEndpoints.includes(config.url ?? '')
+        const url = config.url ?? ''
+
+        const needsCsrf = csrfProtectedEndpoints.some(
+            endpoint => url === endpoint || url.startsWith(`${endpoint}?`)
+        )
 
         if (needsCsrf) {
             console.log(`[API Request ${requestId}] CSRF-protected endpoint, fetching CSRF token`)
@@ -89,12 +62,13 @@ apiClient.interceptors.request.use(
             }
         }
 
+        delete config.headers.Authorization
+
         console.log(`[API Request ${requestId}] Final headers:`, {
             ...config.headers,
-            'X-CSRF-Token': config.headers['X-CSRF-Token'] ?
-                (config.headers['X-CSRF-Token'] as string).substring(0, 10) + '...' :
-                undefined,
-            'Authorization': config.headers.Authorization ? 'Bearer ...' : undefined
+            'X-CSRF-Token': config.headers['X-CSRF-Token']
+                ? (config.headers['X-CSRF-Token'] as string).substring(0, 10) + '...'
+                : undefined,
         })
 
         if (config.data) {
@@ -109,7 +83,6 @@ apiClient.interceptors.request.use(
     }
 )
 
-// Response interceptor for error handling
 apiClient.interceptors.response.use(
     (response) => {
         const requestId = response.config.headers?.['X-Request-ID']
@@ -131,7 +104,6 @@ apiClient.interceptors.response.use(
             headers: error.response?.headers,
         })
 
-        // Handle CSRF token errors (403 with CSRF message)
         if (error.response?.status === 403 && error.response?.data) {
             const errorDetail = (error.response.data as any).detail
             if (errorDetail && typeof errorDetail === 'string' && errorDetail.toLowerCase().includes('csrf')) {
@@ -157,17 +129,13 @@ apiClient.interceptors.response.use(
             }
         }
 
-        // === ENHANCED 401 HANDLING FOR 2FA ===
         if (error.response?.status === 401 && !originalRequest._retry) {
-            // Don't refresh for certain endpoints
             if (originalRequest.url?.includes('/auth/refresh') ||
                 originalRequest.url?.includes('/auth/2fa/verify') ||
                 originalRequest.url?.includes('/auth/login')) {
                 console.log(`[API Response ${requestId}] Skipping refresh for auth endpoint`)
-                removeStoredToken()
                 csrfManager.clearToken()
 
-                // Only redirect if not on auth pages already
                 if (!window.location.pathname.includes('/signin') &&
                     !window.location.pathname.includes('/signup')) {
                     window.location.href = '/signin'
@@ -176,77 +144,34 @@ apiClient.interceptors.response.use(
             }
 
             originalRequest._retry = true
-            console.log(`[API Response ${requestId}] 401 Unauthorized, attempting token refresh`)
+            console.log(`[API Response ${requestId}] 401 Unauthorized, attempting cookie-based token refresh`)
 
-            // Handle concurrent refresh requests
-            if (!isRefreshing) {
-                isRefreshing = true
+            try {
+                const refreshResponse = await apiClient.post('/auth/refresh', {})
+                const user = (refreshResponse.data as any).user
 
-                try {
-                    const refreshToken = getRefreshToken() || localStorage.getItem('refresh_token')
-                    if (refreshToken) {
-                        console.log(`[API Response ${requestId}] Found refresh token, attempting refresh`)
+                useAuthStore.getState().setUser(user)
 
-                        const response = await axios.post(`${API_URL}/auth/refresh`, {
-                            refresh_token: refreshToken,
-                        }, {
-                            withCredentials: true,
-                        })
+                console.log(`[API Response ${requestId}] Token refreshed via cookies, retrying original request`)
 
-                        const { access_token, refresh_token: new_refresh_token } = response.data
-                        setStoredToken(access_token)
+                delete originalRequest.headers.Authorization
 
-                        if (new_refresh_token) {
-                            setRefreshToken(new_refresh_token)
-                        }
+                return apiClient(originalRequest)
+            } catch (refreshError) {
+                console.error(`[API Response ${requestId}] Cookie-based refresh failed:`, refreshError)
 
-                        console.log(`[API Response ${requestId}] Token refreshed successfully`)
+                useAuthStore.getState().logout()
+                csrfManager.clearToken()
 
-                        // Notify all waiting requests
-                        onTokenRefreshed(access_token)
-                        isRefreshing = false
-
-                        if (originalRequest.headers) {
-                            originalRequest.headers.Authorization = `Bearer ${access_token}`
-                        }
-
-                        return apiClient(originalRequest)
-                    } else {
-                        console.log(`[API Response ${requestId}] No refresh token available`)
-                        isRefreshing = false
-                    }
-                } catch (refreshError) {
-                    console.error(`[API Response ${requestId}] Token refresh failed:`, refreshError)
-                    isRefreshing = false
-                    refreshSubscribers = []
-                    removeStoredToken()
-                    csrfManager.clearToken()
-
-                    // Only redirect if not on auth pages
-                    if (!window.location.pathname.includes('/signin') &&
-                        !window.location.pathname.includes('/signup')) {
-                        window.location.href = '/signin'
-                    }
-                    return Promise.reject(refreshError)
+                if (!window.location.pathname.includes('/signin') &&
+                    !window.location.pathname.includes('/signup')) {
+                    window.location.href = '/signin'
                 }
-            } else {
-                // Wait for token refresh to complete
-                console.log(`[API Response ${requestId}] Waiting for ongoing token refresh`)
 
-                return new Promise((resolve) => {
-                    subscribeTokenRefresh((token: string) => {
-                        console.log(`[API Response ${requestId}] Got refreshed token, retrying request`)
-                        if (originalRequest.headers) {
-                            originalRequest.headers.Authorization = `Bearer ${token}`
-                        }
-                        resolve(apiClient(originalRequest))
-                    })
-                })
+                return Promise.reject(refreshError)
             }
         }
-        // === END 2FA ENHANCEMENT ===
 
-        // Handle other error statuses
         if (error.response?.status === 429) {
             console.error(`[API Response ${requestId}] Rate limit exceeded`)
         } else if (error.response?.status === 500) {
@@ -257,7 +182,6 @@ apiClient.interceptors.response.use(
     }
 )
 
-// Debug helpers
 if (import.meta.env.DEV) {
     (window as any).apiClient = apiClient
     console.log('[API Client] Debug: window.apiClient available for inspection')

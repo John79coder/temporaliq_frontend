@@ -2,31 +2,26 @@ import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 
 export type User = {
-    id: number
+    id: string | number
     email: string
     name?: string | null
     is_verified?: boolean
     two_factor_enabled?: boolean
     isInTrial?: boolean
     isSubscribed?: boolean
+    has_used_free_preview?: boolean
 }
 
 type AuthState = {
     user: User | null
-    token: string | null
-    /** true when persisted state has been loaded */
     hydrated: boolean
-    /** internal loading gate for auth bootstrap */
     isLoading: boolean
-    /** derived flag kept in sync to avoid conditional flicker */
     isAuthenticated: boolean
 
-    // actions
     setHydrated: (v: boolean) => void
-    login: (payload: { user: User; token: string }) => void
+    login: (payload: { user: User }) => void
     logout: () => void
     setUser: (user: User | null) => void
-    setToken: (token: string | null) => void
     setLoading: (loading: boolean) => void
 }
 
@@ -34,7 +29,6 @@ export const useAuthStore = create<AuthState>()(
     persist(
         (set) => ({
             user: null,
-            token: null,
             hydrated: false,
             isLoading: true,
             isAuthenticated: false,
@@ -43,14 +37,12 @@ export const useAuthStore = create<AuthState>()(
                 set((state) => ({
                     hydrated: v,
                     isLoading: false,
-                    // recompute from persisted values after hydration
-                    isAuthenticated: Boolean(state.token),
+                    isAuthenticated: Boolean(state.user),
                 })),
 
-            login: ({ user, token }) =>
+            login: ({ user }) =>
                 set(() => ({
                     user,
-                    token,
                     isAuthenticated: true,
                     isLoading: false,
                 })),
@@ -58,21 +50,14 @@ export const useAuthStore = create<AuthState>()(
             logout: () =>
                 set(() => ({
                     user: null,
-                    token: null,
                     isAuthenticated: false,
                     isLoading: false,
                 })),
 
             setUser: (user) =>
-                set((state) => ({
-                    user,
-                    isAuthenticated: Boolean(user) || Boolean(state.token),
-                })),
-
-            setToken: (token) =>
                 set(() => ({
-                    token,
-                    isAuthenticated: Boolean(token),
+                    user,
+                    isAuthenticated: Boolean(user),
                 })),
 
             setLoading: (loading) =>
@@ -83,17 +68,14 @@ export const useAuthStore = create<AuthState>()(
         {
             name: 'auth',
             storage: createJSONStorage(() => localStorage),
-            // Persist only what’s needed
-            partialize: (state) => ({ user: state.user, token: state.token }),
+            partialize: (state) => ({ user: state.user }),
             onRehydrateStorage: () => (state, _error) => {
-                // mark the store as ready after rehydration
                 state?.setHydrated(true)
             },
         },
     ),
 )
 
-// Tiny helpers to keep components tidy
 export const useAuthReady = () =>
     useAuthStore((s) => s.hydrated && !s.isLoading)
 

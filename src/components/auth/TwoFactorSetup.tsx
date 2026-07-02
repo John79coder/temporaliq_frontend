@@ -12,7 +12,7 @@ import { useTwoFactorSetup } from '@/hooks/useTwoFactorSetup'
 
 export const TwoFactorSetup: React.FC = () => {
     const navigate = useNavigate()
-    const { isAuthenticated, token, hydrated, isLoading: authLoading } = useAuthStore()
+    const { isAuthenticated, hydrated, isLoading: authLoading } = useAuthStore()
     const [step, setStep] = useState<'intro' | 'setup' | 'verify' | 'backup'>('intro')
     const [verificationCode, setVerificationCode] = useState('')
     const [showSecret, setShowSecret] = useState(false)
@@ -61,7 +61,7 @@ Store these codes in a secure location. You will need them if you lose access to
     }
 
     // Don't render if not authenticated or still loading
-    if (!hydrated || authLoading || (!isAuthenticated && !token)) {
+    if (!hydrated || authLoading || !isAuthenticated) {
         return (
             <div className="max-w-2xl mx-auto p-6">
                 <div className="flex justify-center items-center h-64">

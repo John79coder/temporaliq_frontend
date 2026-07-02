@@ -1,7 +1,6 @@
 // src/App.tsx
 
 import { debugLogger } from '@/api/debugHelpers';
-import { csrfManager } from '@/api/csrf';
 
 import React, { useEffect, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
@@ -126,23 +125,10 @@ function App() {
         console.log('[App] API URL:', import.meta.env.VITE_API_URL || 'http://localhost:8000');
         console.log('[App] Initial cookies:', document.cookie);
 
-        // Check for existing session
-        const existingToken = localStorage.getItem('access_token');
-        console.log('[App] Existing auth token:', existingToken ? 'present' : 'none');
-
-        // Don't pre-fetch CSRF - let interceptor handle it on first request
         setAppReady(true);
 
-        // === New Debug Logging System ===
-        //console.log('🚀 Initializing debug logging');
-        //debugLogger.testCookiePersistence();
-
         (window as any).debugCommands = {
-            //testCookies: () => debugLogger.testCookiePersistence(),
-            showLogs: () => console.table(debugLogger.exportLogs().logs),
             clearLogs: () => debugLogger.clearLogs(),
-            getCookies: () => document.cookie,
-            getCSRFInfo: () => csrfManager.getDebugInfo(),
         };
 
         console.log('📋 Debug commands available:');

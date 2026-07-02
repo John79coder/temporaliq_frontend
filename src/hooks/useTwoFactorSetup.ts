@@ -23,7 +23,6 @@ export function useTwoFactorSetup() {
 
     const {
         isAuthenticated,
-        token,
         hydrated,
         isLoading: authLoading,
         user,
@@ -35,18 +34,18 @@ export function useTwoFactorSetup() {
             return
         }
 
-        if (!isAuthenticated || !token) {
+        if (!isAuthenticated) {
             console.warn('[TwoFactorSetup] User not authenticated, redirecting to login')
             toast.error('Please login first to setup 2FA')
             navigate('/signin', { replace: true })
         }
-    }, [isAuthenticated, token, navigate, hydrated, authLoading])
+    }, [isAuthenticated, navigate, hydrated, authLoading])
 
 
     const initializeSetup = async () => {
 
         // Double-check authentication
-        if (!isAuthenticated || !token) {
+        if (!isAuthenticated) {
             console.error('[TwoFactorSetup] Cannot initialize - user not authenticated')
             toast.error('Please login first')
             navigate('/signin', { replace: true })
@@ -78,7 +77,7 @@ export function useTwoFactorSetup() {
         setStep: any
     ) => {
 
-        if (!isAuthenticated || !token) {
+        if (!isAuthenticated) {
             toast.error('Please login first')
             navigate('/signin', { replace: true })
             return
@@ -107,20 +106,6 @@ export function useTwoFactorSetup() {
                         two_factor_enabled: true
                     }
                     setUser(updatedUser)
-
-                    // Also update in localStorage to persist
-                    const authData = localStorage.getItem('auth')
-                    if (authData) {
-                        try {
-                            const parsed = JSON.parse(authData)
-                            if (parsed.state) {
-                                parsed.state.user = updatedUser
-                                localStorage.setItem('auth', JSON.stringify(parsed))
-                            }
-                        } catch (e) {
-                            console.error('Failed to update auth storage:', e)
-                        }
-                    }
                 }
             }
         } catch (error: any) {

@@ -6,16 +6,12 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { resetPassword } from '@/api/auth'
 import { Input } from '@/components/common/Input'
 import { Button } from '@/components/common/Button'
-import { getPasswordStrength } from '@/utils/validators'
-import { APP_NAME } from '@/utils/constants'
-import { useAuthStore } from '@/stores/authStore'
-import { setStoredUser, setStoredToken } from '@/utils/storage'
+//import { getPasswordStrength } from '@/utils/validators'
 import toast from 'react-hot-toast'
 
 const ResetPassword: React.FC = () => {
     const navigate = useNavigate()
     const [searchParams] = useSearchParams()
-    const { login } = useAuthStore()
 
     const [formData, setFormData] = useState({
         password: '',
@@ -40,8 +36,8 @@ const ResetPassword: React.FC = () => {
 
     useEffect(() => {
         if (formData.password) {
-            const strength = getPasswordStrength(formData.password)
-            setPasswordStrength(strength)
+            //const strength = getPasswordStrength(formData.password)
+            //setPasswordStrength(strength)
         } else {
             setPasswordStrength({ score: 0, feedback: '' })
         }
@@ -86,11 +82,9 @@ const ResetPassword: React.FC = () => {
         try {
             const response = await resetPassword(token, formData.password)
 
-            // If backend returns user and JWT, auto-login
-            if (response && response.user && response.jwt) {
-                setStoredUser(response.user)
-                setStoredToken(response.jwt)
-                login({ user: response.user, token: response.jwt })
+            if (!response.user) {
+                toast.error('No user returned from password reset')
+                return
             }
 
             setIsSuccess(true)

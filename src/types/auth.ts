@@ -2,6 +2,7 @@
 // src/types/auth.ts - UPDATED TYPES
 // ============================================
 export interface User {
+    is_new_user: boolean;
     isInTrial: boolean;
     id: string | number
     email: string

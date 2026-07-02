@@ -3,18 +3,19 @@ import { apiClient } from './client'
 import { csrfManager } from './csrf'
 import type { AuthResponse, SignInCredentials, SignUpCredentials, User } from '@/types/auth'
 import { API_ENDPOINTS } from '@/utils/constants'
+import { useAuthStore } from '@/stores/authStore'
+import { setStoredUser } from '@/utils/storage'
+import { clearAuthData } from '@/utils/storage'
 
 interface ResetPasswordResponse {
     message: string
     user?: User
-    jwt?: string
 }
 
 export interface SignUpResponse {
     message: string
 }
 
-// === NEW INTERFACES FOR APPLE SIGN-IN AND 2FA ===
 export interface AppleSignInData {
     id_token?: string
     authorization_code?: string
@@ -34,7 +35,6 @@ export interface TwoFactorSetupData {
 export interface TwoFactorVerifyData {
     code: string
     user_id?: string | number
-    temp_token?: string
 }
 
 export interface TwoFactorSetupResponse {
@@ -50,11 +50,9 @@ export interface TwoFactorEnableResponse {
 
 export interface AuthResponseWith2FA extends AuthResponse {
     requires_2fa?: boolean
-    temp_token?: string
+    user_id?: string
 }
-// === END NEW INTERFACES ===
 
-// Debug helper
 const logAuthAction = (action: string, data?: any) => {
     console.log(`[AUTH] ${action}`, {
         timestamp: new Date().toISOString(),
@@ -65,7 +63,6 @@ const logAuthAction = (action: string, data?: any) => {
 }
 
 export const signUpWithEmail = async (credentials: SignUpCredentials): Promise<SignUpResponse> => {
-
     logAuthAction('Starting signUpWithEmail', { email: credentials.email })
 
     try {
@@ -96,7 +93,8 @@ export const signUpWithEmail = async (credentials: SignUpCredentials): Promise<S
     }
 }
 
-export const signInWithEmail = async (credentials: SignInCredentials): Promise<AuthResponseWith2FA> => {
+export const signInWithEmail = async (credentials: SignInCredentials, rememberMe: boolean = true): Promise<AuthResponseWith2FA> => {
+
     logAuthAction('Starting signInWithEmail', { email: credentials.email })
 
     try {
@@ -109,33 +107,29 @@ export const signInWithEmail = async (credentials: SignInCredentials): Promise<A
         )
 
         logAuthAction('Signin response', {
-            hasJwt: !!data.jwt,
-            requires2FA: data.requires_2fa,
+            requires2FA: data.requires_two_factor,
             userId: data.user?.id || data.user_id,
-            fullResponse: data   // For debugging
+            fullResponse: data
         })
 
-        // 2FA IS REQUIRED
         if (data.requires_two_factor === true) {
             logAuthAction('2FA required - navigating to verification')
             return {
                 user: data.user || { id: data.user_id, email: credentials.email, is_verified: true },
-                access_token: '',
-                refresh_token: '',
                 requires_2fa: true,
-                temp_token: String(data.user_id || data.user?.id)
+                user_id: String(data.user_id || data.user?.id)
             }
         }
 
-        // NORMAL LOGIN
-        if (!data.jwt) {
-            throw new Error('No authentication token received')
+        if (!data.user) {
+            throw new Error('No user received from login')
         }
+
+        setStoredUser(data.user, rememberMe)
+        useAuthStore.getState().login({ user: data.user })
 
         return {
             user: data.user,
-            access_token: data.jwt,
-            refresh_token: data.refresh_token || ''
         }
     } catch (error: any) {
         logAuthAction('Signin failed', {
@@ -154,7 +148,6 @@ export const signInWithEmail = async (credentials: SignInCredentials): Promise<A
     }
 }
 
-// === EXISTING FUNCTIONS (UNCHANGED) ===
 export const verifyEmail = async (token: string): Promise<AuthResponse> => {
     logAuthAction('Verifying email', { token: token.substring(0, 10) + '...' })
 
@@ -166,10 +159,12 @@ export const verifyEmail = async (token: string): Promise<AuthResponse> => {
 
         logAuthAction('Email verification successful', { userId: data.user?.id })
 
+        if (data.user) {
+            setStoredUser(data.user)
+        }
+
         return {
             user: data.user,
-            access_token: data.jwt,
-            refresh_token: data.refresh_token
         }
     } catch (error: any) {
         logAuthAction('Email verification failed', {
@@ -245,6 +240,11 @@ export const resetPassword = async (token: string, newPassword: string): Promise
 
         logAuthAction('Password reset successful', { userId: data.user?.id })
 
+        if (data.user) {
+            setStoredUser(data.user)
+            useAuthStore.getState().login({ user: data.user })
+        }
+
         return data
     } catch (error: any) {
         logAuthAction('Password reset failed', {
@@ -259,21 +259,24 @@ export const resetPassword = async (token: string, newPassword: string): Promise
     }
 }
 
-export const refreshToken = async ( refreshToken: string): Promise<AuthResponse> => {
-    logAuthAction('Refreshing token')
+export const refreshToken = async (): Promise<AuthResponse> => {
+    logAuthAction('Refreshing token (cookie-based)')
 
     try {
         const { data } = await apiClient.post(
             API_ENDPOINTS.AUTH.REFRESH,
-            { refresh_token: refreshToken }
+            {}
         )
 
-        logAuthAction('Token refreshed successfully')
+        logAuthAction('Token refreshed successfully', { userId: data.user?.id })
+
+        if (data.user) {
+            setStoredUser(data.user)
+            useAuthStore.getState().setUser(data.user)
+        }
 
         return {
             user: data.user,
-            access_token: data.access_token,
-            refresh_token: data.refresh_token
         }
     } catch (error: any) {
         logAuthAction('Token refresh failed', {
@@ -292,6 +295,11 @@ export const getCurrentUser = async (): Promise<User> => {
         const { data } = await apiClient.get(API_ENDPOINTS.AUTH.CURRENT_USER)
 
         logAuthAction('Current user fetched', { userId: data.user?.id })
+
+        if (data.user) {
+            setStoredUser(data.user)
+            useAuthStore.getState().setUser(data.user)
+        }
 
         return data.user
     } catch (error: any) {
@@ -315,42 +323,44 @@ export const logout = async (): Promise<void> => {
 
         logAuthAction('Logout successful')
     } catch (error) {
-        // Logout should always succeed on frontend
         logAuthAction('Logout error (proceeding anyway)', { error })
     } finally {
-        // Always clear local state
         csrfManager.clearToken()
+
+        clearAuthData()
+
+        useAuthStore.getState().logout()
+
         logAuthAction('Local state cleared')
     }
 }
 
-// === NEW FUNCTIONS FOR APPLE SIGN-IN ===
 export const signInWithApple = async (data: AppleSignInData): Promise<AuthResponseWith2FA> => {
     logAuthAction('Starting Apple Sign In', { hasIdToken: !!data.id_token, hasAuthCode: !!data.authorization_code })
 
     try {
-        const response = await apiClient.post('/auth/apple-signin', data)
+        const response = await apiClient.post(API_ENDPOINTS.AUTH.APPLE, data)
 
         logAuthAction('Apple Sign In response', {
             userId: response.data.user?.id,
-            requires2FA: response.data.requires_2fa
+            requires2FA: response.data.requires_two_factor
         })
 
-        // Check if 2FA is required
-        if (response.data.requires_2fa) {
+        if (response.data.requires_two_factor) {
             return {
                 user: response.data.user,
-                access_token: '',
-                refresh_token: '',
                 requires_2fa: true,
-                temp_token: response.data.temp_token
+                user_id: String(response.data.user_id ?? response.data.user?.id)
             }
+        }
+
+        if (response.data.user) {
+            setStoredUser(response.data.user)
+            useAuthStore.getState().login({ user: response.data.user })
         }
 
         return {
             user: response.data.user,
-            access_token: response.data.jwt,
-            refresh_token: response.data.refresh_token
         }
     } catch (error: any) {
         logAuthAction('Apple Sign In failed', {
@@ -365,7 +375,6 @@ export const signInWithApple = async (data: AppleSignInData): Promise<AuthRespon
     }
 }
 
-// === NEW FUNCTIONS FOR 2FA ===
 export const setup2FA = async (): Promise<TwoFactorSetupResponse> => {
     logAuthAction('Fetching 2FA setup')
 
@@ -409,10 +418,13 @@ export const verify2FA = async (data: TwoFactorVerifyData): Promise<AuthResponse
         const response = await apiClient.post('/auth/2fa/verify', data)
         logAuthAction('2FA verification successful')
 
+        if (response.data.user) {
+            setStoredUser(response.data.user)
+            useAuthStore.getState().login({ user: response.data.user })
+        }
+
         return {
             user: response.data.user,
-            access_token: response.data.jwt,
-            refresh_token: response.data.refresh_token
         }
     } catch (error: any) {
         logAuthAction('2FA verification failed', {
@@ -446,7 +458,6 @@ export const disable2FA = async (): Promise<{ message: string }> => {
     }
 }
 
-
 export const getBackupCodesInfo = async (): Promise<{ codes_remaining: number; two_factor_enabled: boolean }> => {
     logAuthAction('Fetching backup codes info')
 
@@ -466,17 +477,14 @@ export const getBackupCodesInfo = async (): Promise<{ codes_remaining: number; t
             response: error.response?.data
         })
 
-        // Only re-throw 401 errors for re-authentication
         if (error.response?.status === 401) {
             throw error
         }
 
-        // For any other error, return safe defaults
         console.error('Error fetching 2FA status, defaulting to disabled')
         return { codes_remaining: 0, two_factor_enabled: false }
     }
 }
-
 
 export const regenerateBackupCodes = async (): Promise<{ message: string; backup_codes: string[] }> => {
     logAuthAction('Regenerating backup codes')
@@ -506,7 +514,6 @@ export const getOnboardingSteps = async (): Promise<{ steps: Array<{ step: numbe
             error: error.message,
             response: error.response?.data
         })
-        // Return default steps if API fails
         return {
             steps: [
                 { step: 1, title: "Sign Up", description: "Create your account" },
